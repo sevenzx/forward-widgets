@@ -205,7 +205,7 @@ WidgetMetadata = {
     requiredVersion: "0.0.1",
     description: "解析直播订阅链接【五折码：CHEAP.5;七折码：CHEAP】",
     author: "huangxd",
-    site: "https://github.com/sevenzx/forward-widgets"
+    site: "https://github.com/huangxd-/ForwardWidgets"
 };
 
 

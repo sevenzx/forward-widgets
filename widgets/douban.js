@@ -1184,7 +1184,7 @@ WidgetMetadata = {
   requiredVersion: "0.0.1",
   description: "解析豆瓣想看、在看、已看以及根据个人数据生成的个性化推荐【五折码：CHEAP.5;七折码：CHEAP】",
   author: "huangxd",
-  site: "https://github.com/sevenzx/forward-widgets"
+  site: "https://github.com/huangxd-/ForwardWidgets"
 };
 
 async function fetchDoubanPage(user_id, status, start, count) {

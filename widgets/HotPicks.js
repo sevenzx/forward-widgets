@@ -5,7 +5,7 @@ var WidgetMetadata = {
   title: "热门精选",
   description: "获取最新热门影片推荐",
   author: "两块",
-  site: "https://github.com/sevenzx/forward-widgets",
+  site: "https://github.com/2kuai/ForwardWidgets",
   version: "1.2.1",
   requiredVersion: "0.0.1",
   globalParams: [

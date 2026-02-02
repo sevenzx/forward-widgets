@@ -19,7 +19,7 @@ WidgetMetadata = {
   requiredVersion: "0.0.2",
   description: "从danmu_api获取弹幕【五折码：CHEAP.5;七折码：CHEAP】",
   author: "huangxd",
-  site: "https://github.com/sevenzx/forward-widgets",
+  site: "https://github.com/huangxd-/ForwardWidgets",
   globalParams: [
     {
       name: "server",
