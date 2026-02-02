@@ -14,7 +14,7 @@ const CONFIG = {
     icon: "https://assets.vvebo.vip/scripts/icon.png",
     // 替换为你自己的仓库路径
     baseUrl:
-        "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/main/widgets/",
+        "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/",
 };
 
 // 2. 更新后的 URL 列表
