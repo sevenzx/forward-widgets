@@ -7,6 +7,7 @@ import vm from "vm";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
 // --- 1. 基础配置 ---
 const CONFIG = {
   title: "Seven's Widgets",
@@ -14,6 +15,8 @@ const CONFIG = {
   icon: "https://assets.vvebo.vip/scripts/icon.png",
   baseUrl: "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/"
 };
+
+const forcedSite = "https://github.com/sevenzx/forward-widgets";
 
 // --- 2. 统一的对象数组配置 ---
 const widgetsConfig = [
@@ -83,17 +86,31 @@ const downloadFile = (url, dest) => {
   });
 };
 
-const getCleanMetadata = (filePath, override = {}) => {
-  const code = fs.readFileSync(filePath, "utf8");
+/**
+ * 处理 JS 文件：修改其中的 WidgetMetadata.site 并提取元数据
+ */
+const processJsFileAndGetMetadata = (filePath, override = {}) => {
+  let code = fs.readFileSync(filePath, "utf8");
   const fileName = path.basename(filePath);
 
+  // 1. 使用正则替换 JS 文件内容中的 site 字段
+  // 匹配 site: "..." 或 site: '...' 甚至是未加引号的 key
+  const siteRegex = /(site\s*:\s*['"`]).*?(['"`])/;
+  if (siteRegex.test(code)) {
+    code = code.replace(siteRegex, `$1${forcedSite}$2`);
+  } else {
+    // 如果原本没有 site 字段，可以在 WidgetMetadata 对象闭合前强行插入（可选逻辑）
+    // 这里采用简单的替换写回，确保本地文件已被修改
+  }
+  fs.writeFileSync(filePath, code, "utf8");
+
+  // 2. 解析元数据用于生成 .fwd
   const context = { WidgetMetadata: null };
   vm.createContext(context);
-
   try {
     vm.runInContext(code, context);
   } catch (e) {
-    // 忽略执行环境差异导致的错误
+    // 忽略运行时错误
   }
 
   const raw = context.WidgetMetadata;
@@ -103,7 +120,6 @@ const getCleanMetadata = (filePath, override = {}) => {
     ? raw.description.replace(/【.*?】/g, "").trim()
     : "";
 
-  // 覆盖逻辑：如果 override 中有值则使用，否则使用 raw
   return {
     id: override.id || raw.id,
     title: override.title || raw.title,
@@ -117,7 +133,7 @@ const getCleanMetadata = (filePath, override = {}) => {
 
 // --- 5. 主程序 ---
 async function main() {
-  console.log("🚀 开始同步 Widgets (全对象配置模式)");
+  console.log("🚀 开始同步 Widgets");
   const widgetList = [];
 
   for (const item of widgetsConfig) {
@@ -130,7 +146,9 @@ async function main() {
 
       await downloadFile(url, destPath);
 
-      const cleanData = getCleanMetadata(destPath, override);
+      // 修改本地 JS 并获取元数据
+      const cleanData = processJsFileAndGetMetadata(destPath, override);
+
       if (cleanData) {
         widgetList.push(cleanData);
         console.log(`✅ ${override.title ? `[自定义标题: ${override.title}]` : ""}`);
