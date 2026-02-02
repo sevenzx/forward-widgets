@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 // 1. 基础配置
 const CONFIG = {
     title: "Seven's Widgets",
-    description: "Seven个人使用",
+    description: "Seven's personal widgets",
     icon: "https://assets.vvebo.vip/scripts/icon.png",
     // 替换为你自己的仓库路径
     baseUrl:
@@ -31,8 +31,8 @@ const urls = [
     "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js",
 ];
 
-const widgetsDir = path.resolve(__dirname, "../widgets");
-const outputFile = path.resolve(__dirname, "../widgets.fwd");
+const widgetsDir = path.resolve(__dirname, "widgets");
+const outputFile = path.resolve(__dirname, "widgets.fwd");
 
 if (!fs.existsSync(widgetsDir)) {
     fs.mkdirSync(widgetsDir, { recursive: true });
@@ -93,7 +93,7 @@ const getCleanMetadata = (filePath) => {
 };
 
 async function main() {
-    console.log("🚀 开始更新 Widgets (含第三方新增链接)...");
+    console.log("🚀 开始更新 Widgets");
     const widgetList = [];
 
     for (const url of urls) {
