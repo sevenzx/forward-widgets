@@ -1,11 +1,11 @@
 {
-  "title": "Seven's Widgets",
+  "title": "Lucky7 Widgets",
   "description": "Seven's personal widgets",
   "icon": "https://assets.vvebo.vip/scripts/icon.png",
   "widgets": [
     {
       "id": "forward.auto.danmu2",
-      "title": "自动链接弹幕v2",
+      "title": "自动弹幕",
       "description": "自动获取播放链接并从服务器获取弹幕",
       "requiredVersion": "0.0.2",
       "version": "1.13.6",
@@ -14,12 +14,21 @@
     },
     {
       "id": "forward.auto.danmu_api",
-      "title": "danmu_api弹幕",
+      "title": "弹幕API",
       "description": "从danmu_api获取弹幕",
       "requiredVersion": "0.0.2",
       "version": "1.0.3",
       "author": "huangxd",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
+    },
+    {
+      "id": "forward.danmu.pro.online_dict",
+      "title": "多源弹幕",
+      "description": "支持添加多条api并自命名&繁简互转",
+      "requiredVersion": "0.0.2",
+      "version": "1.0.8",
+      "author": "MakkaPakka",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-Pro.js"
     },
     {
       "id": "douban",
