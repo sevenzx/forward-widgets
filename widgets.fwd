@@ -1,35 +1,8 @@
 {
-  "title": "Seven's Widgets",
-  "description": "Seven's personal widgets",
+  "title": "Lucky7 Widgets",
+  "description": "personal forward widgets",
   "icon": "https://assets.vvebo.vip/scripts/icon.png",
   "widgets": [
-    {
-      "id": "forward.auto.danmu2",
-      "title": "自动弹幕",
-      "description": "自动获取播放链接并从服务器获取弹幕",
-      "requiredVersion": "0.0.2",
-      "version": "1.13.6",
-      "author": "huangxd",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
-    },
-    {
-      "id": "forward.auto.danmu_api",
-      "title": "弹幕API",
-      "description": "从danmu_api获取弹幕",
-      "requiredVersion": "0.0.2",
-      "version": "1.0.3",
-      "author": "huangxd",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
-    },
-    {
-      "id": "forward.danmu.pro.online_dict",
-      "title": "多源弹幕",
-      "description": "支持添加多条api并自命名&繁简互转",
-      "requiredVersion": "0.0.2",
-      "version": "1.0.9",
-      "author": "MakkaPakka",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-Pro.js"
-    },
     {
       "id": "douban",
       "title": "豆瓣我看&豆瓣个性化推荐",
@@ -101,6 +74,42 @@
       "version": "2.0.0",
       "author": "Autism ",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/Bangumi_v2.0.0.js"
+    },
+    {
+      "id": "platform.originals.ui.fix",
+      "title": "播出平台",
+      "description": "发现Netflix/HBO/腾讯/B站等平台自制内容",
+      "requiredVersion": "0.0.1",
+      "version": "1.0.4",
+      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/pingtaidujia.js"
+    },
+    {
+      "id": "forward.auto.danmu2",
+      "title": "自动弹幕",
+      "description": "自动获取播放链接并从服务器获取弹幕",
+      "requiredVersion": "0.0.2",
+      "version": "1.13.6",
+      "author": "huangxd",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
+    },
+    {
+      "id": "forward.auto.danmu_api",
+      "title": "弹幕API",
+      "description": "从danmu_api获取弹幕",
+      "requiredVersion": "0.0.2",
+      "version": "1.0.3",
+      "author": "huangxd",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
+    },
+    {
+      "id": "forward.danmu.pro.online_dict",
+      "title": "多源弹幕",
+      "description": "支持添加多条api并自命名&繁简互转",
+      "requiredVersion": "0.0.2",
+      "version": "1.0.9",
+      "author": "MakkaPakka",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-Pro.js"
     }
   ]
 }

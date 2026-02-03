@@ -9,8 +9,8 @@ const __dirname = path.dirname(__filename);
 
 // --- 1. 基础配置 ---
 const CONFIG = {
-  title: "Seven's Widgets",
-  description: "Seven's personal widgets",
+  title: "Lucky7 Widgets",
+  description: "personal forward widgets",
   icon: "https://assets.vvebo.vip/scripts/icon.png",
   baseUrl:
     "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/",
@@ -18,17 +18,6 @@ const CONFIG = {
 
 // --- 2. 统一的对象数组配置 ---
 const widgetsConfig = [
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_auto.js",
-    override: { title: "自动弹幕" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_api.js",
-    override: { title: "弹幕API" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/danmuapi-Pro.js",
-  },
   {
     url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/douban.js",
   },
@@ -52,6 +41,21 @@ const widgetsConfig = [
   },
   {
     url: "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js",
+  },
+  {
+    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/pingtaidujia.js",
+    override: { title: "播出平台" },
+  },
+  {
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_auto.js",
+    override: { title: "自动弹幕" },
+  },
+  {
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_api.js",
+    override: { title: "弹幕API" },
+  },
+  {
+    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/danmuapi-Pro.js",
   },
 ];
 
