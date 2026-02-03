@@ -12,46 +12,47 @@ const CONFIG = {
   title: "Seven's Widgets",
   description: "Seven's personal widgets",
   icon: "https://assets.vvebo.vip/scripts/icon.png",
-  baseUrl: "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/"
+  baseUrl:
+    "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/",
 };
 
 // --- 2. 统一的对象数组配置 ---
 const widgetsConfig = [
   {
     url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_auto.js",
-    override: { title: "自动弹幕" }
+    override: { title: "自动弹幕" },
   },
   {
     url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_api.js",
-    override: { title: "弹幕API" }
+    override: { title: "弹幕API" },
   },
   {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/danmuapi-Pro.js"
+    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/danmuapi-Pro.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/douban.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/douban.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/trakt.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/trakt.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/live.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/live.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/yatu.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/yatu.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/zhuijurili.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/zhuijurili.js",
   },
   {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/letterboxd.js"
+    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/letterboxd.js",
   },
   {
-    url: "https://raw.githubusercontent.com/2kuai/ForwardWidgets/refs/heads/main/Widgets/HotPicks.js"
+    url: "https://raw.githubusercontent.com/2kuai/ForwardWidgets/refs/heads/main/Widgets/HotPicks.js",
   },
   {
-    url: "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js"
-  }
+    url: "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js",
+  },
 ];
 
 // --- 3. 路径准备 ---
@@ -67,19 +68,21 @@ if (!fs.existsSync(widgetsDir)) {
 const downloadFile = (url, dest) => {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(dest);
-    https.get(url, (res) => {
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      res.pipe(file);
-      file.on("finish", () => {
-        file.close();
-        resolve();
+    https
+      .get(url, (res) => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        res.pipe(file);
+        file.on("finish", () => {
+          file.close();
+          resolve();
+        });
+      })
+      .on("error", (err) => {
+        fs.unlink(dest, () => reject(err));
       });
-    }).on("error", (err) => {
-      fs.unlink(dest, () => reject(err));
-    });
   });
 };
 
@@ -103,21 +106,105 @@ const getCleanMetadata = (filePath, override = {}) => {
     ? raw.description.replace(/【.*?】/g, "").trim()
     : "";
 
-  // 覆盖逻辑：如果 override 中有值则使用，否则使用 raw
-  return {
+  const finalData = {
     id: override.id || raw.id,
     title: override.title || raw.title,
     description: override.description || cleanDescription,
     requiredVersion: override.requiredVersion || raw.requiredVersion,
     version: override.version || raw.version,
     author: override.author || raw.author,
-    url: `${CONFIG.baseUrl}${fileName}`
+  };
+
+  const metadataRegex =
+    /(const\s+|var\s+)?(WidgetMetadata\s*=\s*\{)([\s\S]*?)(\};)/;
+  const match = code.match(metadataRegex);
+
+  if (match) {
+    let metadataContent = match[3];
+    const originalMetadataContent = metadataContent;
+
+    const complexContents = [];
+    const complexFieldNames = ["modules", "globalParams", "params"];
+    let tempMetadataContent = metadataContent;
+
+    for (const fieldName of complexFieldNames) {
+      const fieldRegex = new RegExp(`(\\b${fieldName}\\b\\s*:\\s*\\[)`);
+      const fieldMatch = tempMetadataContent.match(fieldRegex);
+      if (!fieldMatch) continue;
+
+      const startIndex = fieldMatch.index;
+      // Start searching for the closing bracket after the opening one.
+      const contentStartIndex = fieldMatch.index + fieldMatch[0].length;
+
+      let balance = 1;
+      let endIndex = -1;
+      for (let i = contentStartIndex; i < tempMetadataContent.length; i++) {
+        if (tempMetadataContent[i] === "[") balance++;
+        else if (tempMetadataContent[i] === "]") balance--;
+        if (balance === 0) {
+          endIndex = i;
+          break;
+        }
+      }
+
+      if (endIndex !== -1) {
+        // The block includes the key, like `modules: [...]`
+        const block = tempMetadataContent.substring(startIndex, endIndex + 1);
+        const placeholder = `__PLACEHOLDER_${complexContents.length}__`;
+        complexContents.push(block);
+        tempMetadataContent = tempMetadataContent.replace(block, placeholder);
+      }
+    }
+
+    let processedContent = tempMetadataContent;
+    for (const [key, value] of Object.entries(finalData)) {
+      if (value === undefined || value === null) continue;
+      const fieldRegex = new RegExp(`(${key}\\s*:\\s*)(['"])(.*?)(['"])(,?)`);
+      const fieldMatch = processedContent.match(fieldRegex);
+
+      if (fieldMatch) {
+        const existingValue = fieldMatch[3];
+        if (existingValue !== value) {
+          const quote = fieldMatch[2];
+          const escapedValue = value
+            .replace(/\\/g, "\\\\")
+            .replace(/\n/g, "\\n")
+            .replace(new RegExp(quote, "g"), `\\${quote}`);
+          processedContent = processedContent.replace(
+            fieldRegex,
+            `$1$2${escapedValue}$4$5`,
+          );
+        }
+      }
+    }
+
+    complexContents.forEach((block, index) => {
+      processedContent = processedContent.replace(
+        `__PLACEHOLDER_${index}__`,
+        block,
+      );
+    });
+
+    metadataContent = processedContent;
+
+    if (originalMetadataContent !== metadataContent) {
+      const constOrVarPart = match[1] || "";
+      const newMetadataBlock = `${constOrVarPart}${match[2]}${metadataContent}${match[4]}`;
+      const updatedCode = code.replace(match[0], newMetadataBlock);
+      fs.writeFileSync(filePath, updatedCode, "utf8");
+    }
+  }
+
+  // 覆盖逻辑：如果 override 中有值则使用，否则使用 raw
+  return {
+    ...finalData,
+    url: `${CONFIG.baseUrl}${fileName}`,
   };
 };
 
 // --- 5. 主程序 ---
 async function main() {
-  console.log("🚀 开始同步 Widgets (全对象配置模式)");
+  console.log("🚀 开始同步 Widgets");
   const widgetList = [];
 
   for (const item of widgetsConfig) {
@@ -133,7 +220,9 @@ async function main() {
       const cleanData = getCleanMetadata(destPath, override);
       if (cleanData) {
         widgetList.push(cleanData);
-        console.log(`✅ ${override.title ? `[自定义标题: ${override.title}]` : ""}`);
+        console.log(
+          `✅ ${override.title ? `[自定义标题: ${override.title}]` : ""}`,
+        );
       } else {
         console.log("⚠️ 无法解析元数据");
       }
@@ -146,7 +235,7 @@ async function main() {
     title: CONFIG.title,
     description: CONFIG.description,
     icon: CONFIG.icon,
-    widgets: widgetList
+    widgets: widgetList,
   };
 
   fs.writeFileSync(outputFile, JSON.stringify(finalResult, null, 2), "utf8");

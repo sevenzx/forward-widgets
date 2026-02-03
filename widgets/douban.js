@@ -1182,7 +1182,7 @@ WidgetMetadata = {
   ],
   version: "1.0.20",
   requiredVersion: "0.0.1",
-  description: "解析豆瓣想看、在看、已看以及根据个人数据生成的个性化推荐【五折码：CHEAP.5;七折码：CHEAP】",
+  description: "解析豆瓣想看、在看、已看以及根据个人数据生成的个性化推荐",
   author: "huangxd",
   site: "https://github.com/huangxd-/ForwardWidgets"
 };

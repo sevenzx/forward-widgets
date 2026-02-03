@@ -26,7 +26,7 @@
       "title": "多源弹幕",
       "description": "支持添加多条api并自命名&繁简互转",
       "requiredVersion": "0.0.2",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "author": "MakkaPakka",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-Pro.js"
     },

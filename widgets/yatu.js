@@ -198,7 +198,7 @@ WidgetMetadata = {
     ],
     version: "1.0.6",
     requiredVersion: "0.0.1",
-    description: "解析雅图每日放送更新以及各类排行榜【五折码：CHEAP.5;七折码：CHEAP】",
+    description: "解析雅图每日放送更新以及各类排行榜",
     author: "huangxd",
     site: "https://github.com/huangxd-/ForwardWidgets"
 };
