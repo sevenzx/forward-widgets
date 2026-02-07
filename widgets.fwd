@@ -1,8 +1,35 @@
 {
   "title": "Lucky7 Widgets",
-  "description": "personal forward widgets",
+  "description": "Personal Forward Widgets",
   "icon": "https://assets.vvebo.vip/scripts/icon.png",
   "widgets": [
+    {
+      "id": "forward.auto.danmu2",
+      "title": "自动弹幕",
+      "description": "自动获取播放链接并从服务器获取弹幕",
+      "requiredVersion": "0.0.2",
+      "version": "1.13.6",
+      "author": "huangxd",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
+    },
+    {
+      "id": "forward.auto.danmu_api",
+      "title": "弹幕API",
+      "description": "从danmu_api获取弹幕",
+      "requiredVersion": "0.0.2",
+      "version": "1.0.3",
+      "author": "huangxd",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
+    },
+    {
+      "id": "danmu.pro.online",
+      "title": "弹幕多源",
+      "description": "支持添加多条api并自命名&繁简互转",
+      "requiredVersion": "0.0.2",
+      "version": "1.1.3",
+      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-ProMax.js"
+    },
     {
       "id": "douban",
       "title": "豆瓣我看&豆瓣个性化推荐",
@@ -62,7 +89,7 @@
       "title": "热门精选",
       "description": "获取最新热门影片推荐",
       "requiredVersion": "0.0.1",
-      "version": "1.2.1",
+      "version": "1.5.51",
       "author": "两块",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/HotPicks.js"
     },
@@ -85,31 +112,22 @@
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/pingtaidujia.js"
     },
     {
-      "id": "forward.auto.danmu2",
-      "title": "自动弹幕",
-      "description": "自动获取播放链接并从服务器获取弹幕",
-      "requiredVersion": "0.0.2",
-      "version": "1.13.6",
-      "author": "huangxd",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
+      "id": "ultimate_media_hub_pro_ui",
+      "title": "全球影视",
+      "description": "集大成之作：Trakt/豆瓣/平台分流，全线支持展示。",
+      "requiredVersion": "0.0.1",
+      "version": "1.2.1",
+      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/cn-int-bangdan.js"
     },
     {
-      "id": "forward.auto.danmu_api",
-      "title": "弹幕API",
-      "description": "从danmu_api获取弹幕",
-      "requiredVersion": "0.0.2",
-      "version": "1.0.3",
-      "author": "huangxd",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
-    },
-    {
-      "id": "forward.danmu.pro.online_dict",
-      "title": "多源弹幕",
-      "description": "支持添加多条api并自命名&繁简互转",
-      "requiredVersion": "0.0.2",
-      "version": "1.0.9",
-      "author": "MakkaPakka",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-Pro.js"
+      "id": "global_tv_calendar_ultimate",
+      "title": "全球追剧时刻表",
+      "description": "聚合全球剧集更新表&综艺排期&bangumi动漫周更表。",
+      "requiredVersion": "0.0.1",
+      "version": "2.0.9",
+      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/zhuijurili-one.js"
     }
   ]
 }
