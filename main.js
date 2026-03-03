@@ -27,7 +27,7 @@ const widgetsConfig = [
     override: { title: "弹幕API" },
   },
   {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/danmuapi-ProMax.js",
+    url: "https://raw.githubusercontent.com/ocd0711/forward_module/master/widgets/combined.js",
   },
   {
     url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/douban.js",
@@ -52,18 +52,7 @@ const widgetsConfig = [
   },
   {
     url: "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/pingtaidujia.js",
-    override: { title: "播出平台" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/cn-int-bangdan.js",
-    override: { title: "全球影视" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/MakkaPakka518/ForwardWidgets/refs/heads/main/widgets/hebingban/zhuijurili-one.js",
-  },
+  }
 ];
 
 // --- 3. 路径准备 ---

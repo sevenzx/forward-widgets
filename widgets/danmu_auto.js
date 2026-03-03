@@ -366,7 +366,6 @@ var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "sy
 
 // danmu_api/configs/envs.js
 var Envs = class {
-  // 允许的源合并
   /**
    * 获取环境变量
    * @param {string} key 环境变量的键
@@ -476,23 +475,23 @@ var Envs = class {
    * 从环境变量 MERGE_SOURCE_PAIRS 获取配置
    * 支持使用分号或逗号分隔多组配置
    * 支持一主多从配置，第一个为主源，后续为副源
-   * 格式示例: bilibili&animeko, dandan&animeko&bahamut
-   * @returns {Array} 合并配置数组 [{primary: 'dandan', secondaries: ['animeko', 'bahamut']}, ...]
+   * 允许单源配置（用于保留特定源的原始结果，不被合并消耗）
+   * 格式示例: bilibili&animeko, dandan&animeko&bahamut,dandan
+   * @returns {Array} 合并配置数组 [{primary: 'dandan', secondaries: ['animeko', 'bahamut']}, {primary: 'renren', secondaries: []}]
    */
   static resolveMergeSourcePairs() {
     const config = this.get("MERGE_SOURCE_PAIRS", "", "string");
     if (!config) return [];
     return config.split(/[,;]/).map((group) => {
-      if (!group || !group.includes("&")) return null;
+      if (!group) return null;
       const parts = group.split("&").map((s) => s.trim()).filter((s) => s);
-      if (parts.length < 2) return null;
+      if (parts.length < 1) return null;
       const primary = parts[0];
       const secondaries = parts.slice(1);
       if (!this.MERGE_ALLOWED_SOURCES.includes(primary)) return null;
       const validSecondaries = secondaries.filter(
         (sec) => sec !== primary && this.MERGE_ALLOWED_SOURCES.includes(sec)
       );
-      if (validSecondaries.length === 0) return null;
       return { primary, secondaries: validSecondaries };
     }).filter(Boolean);
   }
@@ -514,6 +513,25 @@ var Envs = class {
     } catch (error) {
       console.warn(`Invalid EPISODE_TITLE_FILTER format, using default.`);
       return new RegExp(`^(.*?)(?:${defaultFilter})(.*?)$`, "i");
+    }
+  }
+  /**
+   * 解析剧名过滤正则
+   * @description 用于控制剧名过滤规则，没有默认值
+   * @returns {RegExp|null} 过滤正则表达式或null
+   */
+  static resolveAnimeTitleFilter() {
+    const filterStr = this.get("ANIME_TITLE_FILTER", "", "string", false).trim();
+    if (!filterStr) {
+      this.accessedEnvVars.set("ANIME_TITLE_FILTER", "");
+      return null;
+    }
+    this.accessedEnvVars.set("ANIME_TITLE_FILTER", filterStr);
+    try {
+      return new RegExp(`^(.*?)(?:${filterStr})(.*?)$`, "i");
+    } catch (error) {
+      console.warn(`Invalid ANIME_TITLE_FILTER format, returning null.`);
+      return null;
     }
   }
   /**
@@ -573,14 +591,20 @@ var Envs = class {
       "VOD_REQUEST_TIMEOUT": { category: "source", type: "number", description: "VOD\u8BF7\u6C42\u8D85\u65F6\u65F6\u95F4\uFF0C\u9ED8\u8BA410000", min: 5e3, max: 3e4 },
       "BILIBILI_COOKIE": { category: "source", type: "text", description: "B\u7AD9Cookie" },
       "YOUKU_CONCURRENCY": { category: "source", type: "number", description: "\u4F18\u9177\u5E76\u53D1\u914D\u7F6E\uFF0C\u9ED8\u8BA48", min: 1, max: 16 },
-      "MERGE_SOURCE_PAIRS": { category: "source", type: "multi-select", options: this.MERGE_ALLOWED_SOURCES, description: "\u6E90\u5408\u5E76\u914D\u7F6E\uFF0C\u914D\u7F6E\u540E\u5C06\u5BF9\u5E94\u6E90\u5408\u5E76\u540C\u65F6\u4E00\u8D77\u83B7\u53D6\u5F39\u5E55\u8FD4\u56DE\uFF0C\u5141\u8BB8\u591A\u7EC4\uFF0C\u5141\u8BB8\u591A\u6E90\uFF0C\u4E00\u7EC4\u4E2D\u7B2C\u4E00\u4E2A\u4E3A\u4E3B\u6E90\u5176\u4F59\u4E3A\u526F\u6E90\uFF0C\u526F\u6E90\u5F80\u4E3B\u6E90\u5408\u5E76\uFF0C\u4E3B\u6E90\u5982\u679C\u6CA1\u6709\u7ED3\u679C\u4F1A\u8F6E\u66FF\u4E0B\u4E00\u4E2A\u4F5C\u4E3A\u4E3B\u6E90\u3002\n\u683C\u5F0F\uFF1A\u6E901&\u6E902&\u6E903\uFF0C\u591A\u7EC4\u7528\u9017\u53F7\u5206\u9694\u3002\n\u793A\u4F8B\uFF1Adandan&animeko&bahamut,bilibili&animeko" },
+      "MERGE_SOURCE_PAIRS": { category: "source", type: "multi-select", options: this.MERGE_ALLOWED_SOURCES, description: "\u6E90\u5408\u5E76\u914D\u7F6E\uFF0C\u914D\u7F6E\u540E\u5C06\u5BF9\u5E94\u6E90\u5408\u5E76\u540C\u65F6\u4E00\u8D77\u83B7\u53D6\u5F39\u5E55\u8FD4\u56DE\uFF0C\u5141\u8BB8\u591A\u7EC4\uFF0C\u5141\u8BB8\u591A\u6E90\uFF0C\u5141\u8BB8\u586B\u5355\u6E90\u8868\u793A\u4FDD\u7559\u539F\u7ED3\u679C\uFF0C\u4E00\u7EC4\u4E2D\u7B2C\u4E00\u4E2A\u4E3A\u4E3B\u6E90\u5176\u4F59\u4E3A\u526F\u6E90\uFF0C\u526F\u6E90\u5F80\u4E3B\u6E90\u5408\u5E76\uFF0C\u4E3B\u6E90\u5982\u679C\u6CA1\u6709\u7ED3\u679C\u4F1A\u8F6E\u66FF\u4E0B\u4E00\u4E2A\u4F5C\u4E3A\u4E3B\u6E90\u3002\n\u683C\u5F0F\uFF1A\u6E901&\u6E902&\u6E903 \uFF0C\u591A\u7EC4\u7528\u9017\u53F7\u5206\u9694\u3002\n\u793A\u4F8B\uFF1Adandan&animeko&bahamut,bilibili&animeko,dandan" },
       // 匹配配置
-      "PLATFORM_ORDER": { category: "match", type: "multi-select", options: this.ALLOWED_PLATFORMS, description: "\u5E73\u53F0\u6392\u5E8F\u914D\u7F6E\uFF0C\u53EF\u4EE5\u914D\u7F6E\u81EA\u52A8\u5339\u914D\u65F6\u7684\u4F18\u9009\u5E73\u53F0\u3002\n\u5F53\u914D\u7F6E\u5408\u5E76\u5E73\u53F0\u7684\u65F6\u5019\uFF0C\u53EF\u4EE5\u6307\u5B9A\u671F\u671B\u7684\u5408\u5E76\u6E90\uFF0C\n\u793A\u4F8B\uFF1A\u4E00\u4E2A\u7ED3\u679C\u8FD4\u56DE\u4E86\u201Cdandan&bilibili1&animeko\u201D\u548C\u201Cyouku\u201D\u65F6\uFF0C\n\u5F53\u914D\u7F6E\u201Cyouku\u201D\u65F6\u8FD4\u56DE\u201Cyouku\u201D \n\u5F53\u914D\u7F6E\u201Cdandan&animeko\u201D\u65F6\u8FD4\u56DE\u201Cdandan&bilibili1&animeko\u201D" },
+      "PLATFORM_ORDER": { category: "match", type: "multi-select", options: this.ALLOWED_PLATFORMS, description: '\u5E73\u53F0\u6392\u5E8F\u914D\u7F6E\uFF0C\u53EF\u4EE5\u914D\u7F6E\u81EA\u52A8\u5339\u914D\u65F6\u7684\u4F18\u9009\u5E73\u53F0\u3002\n\u5F53\u914D\u7F6E\u5408\u5E76\u5E73\u53F0\u7684\u65F6\u5019\uFF0C\u53EF\u4EE5\u6307\u5B9A\u671F\u671B\u7684\u5408\u5E76\u6E90\uFF0C\n\u793A\u4F8B\uFF1A\u4E00\u4E2A\u7ED3\u679C\u8FD4\u56DE\u4E86"dandan&bilibili1&animeko"\u548C"youku"\u65F6\uFF0C\n\u5F53\u914D\u7F6E"youku"\u65F6\u8FD4\u56DE"youku" \n\u5F53\u914D\u7F6E"dandan&animeko"\u65F6\u8FD4\u56DE"dandan&bilibili1&animeko"' },
+      "ANIME_TITLE_FILTER": { category: "match", type: "text", description: "\u5267\u540D\u8FC7\u6EE4\u89C4\u5219" },
       "EPISODE_TITLE_FILTER": { category: "match", type: "text", description: "\u5267\u96C6\u6807\u9898\u8FC7\u6EE4\u89C4\u5219" },
-      "ENABLE_EPISODE_FILTER": { category: "match", type: "boolean", description: "\u96C6\u6807\u9898\u8FC7\u6EE4\u5F00\u5173" },
+      "ENABLE_ANIME_EPISODE_FILTER": { category: "match", type: "boolean", description: "\u63A7\u5236\u624B\u52A8\u641C\u7D22\u7684\u65F6\u5019\u662F\u5426\u6839\u636EANIME_TITLE_FILTER\u8FDB\u884C\u5267\u540D\u8FC7\u6EE4\u4EE5\u53CA\u6839\u636EEPISODE_TITLE_FILTER\u8FDB\u884C\u96C6\u6807\u9898\u8FC7\u6EE4" },
       "STRICT_TITLE_MATCH": { category: "match", type: "boolean", description: "\u4E25\u683C\u6807\u9898\u5339\u914D\u6A21\u5F0F" },
       "TITLE_TO_CHINESE": { category: "match", type: "boolean", description: "\u5916\u8BED\u6807\u9898\u8F6C\u6362\u4E2D\u6587\u5F00\u5173" },
+      "ANIME_TITLE_SIMPLIFIED": { category: "match", type: "boolean", description: "\u641C\u7D22\u7684\u5267\u540D\u6807\u9898\u81EA\u52A8\u7E41\u8F6C\u7B80" },
       "TITLE_MAPPING_TABLE": { category: "match", type: "map", description: '\u5267\u540D\u6620\u5C04\u8868\uFF0C\u7528\u4E8E\u81EA\u52A8\u5339\u914D\u65F6\u66FF\u6362\u6807\u9898\u8FDB\u884C\u641C\u7D22\uFF0C\u683C\u5F0F\uFF1A\u539F\u59CB\u6807\u9898->\u6620\u5C04\u6807\u9898;\u539F\u59CB\u6807\u9898->\u6620\u5C04\u6807\u9898;... \uFF0C\u4F8B\u5982\uFF1A"\u5510\u671D\u8BE1\u4E8B\u5F55->\u5510\u671D\u8BE1\u4E8B\u5F55\u4E4B\u897F\u884C;\u56FD\u8272\u82B3\u534E->\u9526\u7EE3\u82B3\u534E"' },
+      "AI_BASE_URL": { category: "match", type: "text", description: "AI\u670D\u52A1\u57FA\u7840URL\uFF0C\u4E0D\u586B\u9ED8\u8BA4\u4E3Ahttps://api.openai.com/v1" },
+      "AI_MODEL": { category: "match", type: "text", description: "AI\u6A21\u578B\u540D\u79F0\uFF0C\u4E0D\u586B\u9ED8\u8BA4\u4E3Agpt-4o" },
+      "AI_API_KEY": { category: "match", type: "text", description: "AI\u670D\u52A1API\u5BC6\u94A5\uFF0C\u9ED8\u8BA4\u4E3A\u7A7A\uFF0C\u9700\u624B\u52A8\u586B\u5199" },
+      "AI_MATCH_PROMPT": { category: "match", type: "text", description: "AI\u81EA\u52A8\u5339\u914D\u63D0\u793A\u8BCD\u6A21\u677F\uFF0C\u4E0D\u586B\u63D0\u4F9B\u9ED8\u8BA4\u63D0\u793A\u8BCD\uFF0C\u9ED8\u8BA4\u63D0\u793A\u8BCD\u8BF7\u67E5\u770BREADME" },
       // 弹幕配置
       "BLOCKED_WORDS": { category: "danmu", type: "text", description: "\u5C4F\u853D\u8BCD\u5217\u8868" },
       "GROUP_MINUTE": { category: "danmu", type: "number", description: "\u5206\u949F\u5185\u5408\u5E76\u53BB\u91CD\uFF080\u8868\u793A\u4E0D\u53BB\u91CD\uFF09\uFF0C\u9ED8\u8BA41", min: 0, max: 30 },
@@ -590,6 +614,7 @@ var Envs = class {
       "CONVERT_COLOR": { category: "danmu", type: "select", options: ["default", "white", "color"], description: "\u5F39\u5E55\u8F6C\u6362\u989C\u8272\u914D\u7F6E" },
       "DANMU_OUTPUT_FORMAT": { category: "danmu", type: "select", options: ["json", "xml"], description: "\u5F39\u5E55\u8F93\u51FA\u683C\u5F0F\uFF0C\u9ED8\u8BA4json" },
       "DANMU_PUSH_URL": { category: "danmu", type: "text", description: "\u5F39\u5E55\u63A8\u9001\u5730\u5740\uFF0C\u793A\u4F8B http://127.0.0.1:9978/action?do=refresh&type=danmaku&path= " },
+      "LIKE_SWITCH": { category: "danmu", type: "boolean", description: "\u5F39\u5E55\u70B9\u8D5E\u6570\u663E\u793A\u5F00\u5173\uFF0C\u9ED8\u8BA4\u5F00\u542F" },
       // 缓存配置
       "SEARCH_CACHE_MINUTES": { category: "cache", type: "number", description: "\u641C\u7D22\u7ED3\u679C\u7F13\u5B58\u65F6\u95F4(\u5206\u949F)\uFF0C\u9ED8\u8BA41", min: 1, max: 120 },
       "COMMENT_CACHE_MINUTES": { category: "cache", type: "number", description: "\u5F39\u5E55\u7F13\u5B58\u65F6\u95F4(\u5206\u949F)\uFF0C\u9ED8\u8BA41", min: 1, max: 120 },
@@ -597,6 +622,7 @@ var Envs = class {
       "MAX_LAST_SELECT_MAP": { category: "cache", type: "number", description: "\u8BB0\u4F4F\u4E0A\u6B21\u9009\u62E9\u6620\u5C04\u7F13\u5B58\u5927\u5C0F\u9650\u5236", min: 10, max: 1e3 },
       "UPSTASH_REDIS_REST_URL": { category: "cache", type: "text", description: "Upstash Redis\u8BF7\u6C42\u94FE\u63A5" },
       "UPSTASH_REDIS_REST_TOKEN": { category: "cache", type: "text", description: "Upstash Redis\u8BBF\u95EE\u4EE4\u724C" },
+      "LOCAL_REDIS_URL": { category: "cache", type: "text", description: "\u672C\u5730 Redis \u8FDE\u63A5URL\uFF0C\u793A\u4F8B\uFF1Aredis://:password@127.0.0.1:6379/0\uFF0C\u53EA\u652F\u6301\u672C\u5730\u90E8\u7F72\u548Cdocker\u90E8\u7F72" },
       // 系统配置
       "PROXY_URL": { category: "system", type: "text", description: "\u4EE3\u7406/\u53CD\u4EE3\u5730\u5740" },
       "TMDB_API_KEY": { category: "system", type: "text", description: "TMDB API\u5BC6\u94A5" },
@@ -633,6 +659,8 @@ var Envs = class {
       // 源合并配置，用于将源合并获取
       platformOrderArr: this.resolvePlatformOrder(),
       // 自动匹配优选平台
+      animeTitleFilter: this.resolveAnimeTitleFilter(),
+      // 剧名正则过滤
       episodeTitleFilter: this.resolveEpisodeTitleFilter(),
       // 剧集标题正则过滤
       blockedWords: this.get("BLOCKED_WORDS", "", "string"),
@@ -647,16 +675,20 @@ var Envs = class {
       // 弹幕简繁体转换设置：default（默认不转换）、simplified（繁转简）、traditional（简转繁）
       danmuPushUrl: this.get("DANMU_PUSH_URL", "", "string"),
       // 代理/反代地址
+      likeSwitch: this.get("LIKE_SWITCH", true, "boolean"),
+      // 弹幕点赞数显示开关，默认开启
       tmdbApiKey: this.get("TMDB_API_KEY", "", "string", true),
       // TMDB API KEY
       redisUrl: this.get("UPSTASH_REDIS_REST_URL", "", "string", true),
       // upstash redis url
       redisToken: this.get("UPSTASH_REDIS_REST_TOKEN", "", "string", true),
       // upstash redis url
+      localRedisUrl: this.get("LOCAL_REDIS_URL", "", "string", true),
+      // 本地 Redis 连接URL，示例：redis://:password@127.0.0.1:6379/0，只支持本地部署和docker部署
       rateLimitMaxRequests: this.get("RATE_LIMIT_MAX_REQUESTS", 3, "number"),
       // 限流配置：时间窗口内最大请求次数（默认 3，0表示不限流）
-      enableEpisodeFilter: this.get("ENABLE_EPISODE_FILTER", false, "boolean"),
-      // 集标题过滤开关配置（默认 false，禁用过滤）
+      enableAnimeEpisodeFilter: this.get("ENABLE_ANIME_EPISODE_FILTER", false, "boolean"),
+      // 控制手动搜索的时候是否根据ANIME_TITLE_FILTER进行剧名过滤以及根据EPISODE_TITLE_FILTER进行集标题过滤（默认 false，禁用过滤）
       logLevel: this.get("LOG_LEVEL", "info", "string"),
       // 日志级别配置（默认 info，可选值：error, warn, info）
       searchCacheMinutes: this.get("SEARCH_CACHE_MINUTES", 1, "number"),
@@ -673,8 +705,18 @@ var Envs = class {
       // 严格标题匹配模式配置（默认 false，宽松模糊匹配）
       titleToChinese: this.get("TITLE_TO_CHINESE", false, "boolean"),
       // 外语标题转换中文开关
+      animeTitleSimplified: this.get("ANIME_TITLE_SIMPLIFIED", false, "boolean"),
+      // 搜索的剧名标题自动繁转简
       titleMappingTable: this.resolveTitleMappingTable(),
       // 剧名映射表，用于自动匹配时替换标题进行搜索
+      aiBaseUrl: this.get("AI_BASE_URL", "https://api.openai.com/v1", "string"),
+      // AI服务基础URL
+      aiModel: this.get("AI_MODEL", "gpt-4o", "string"),
+      // AI模型名称
+      aiApiKey: this.get("AI_API_KEY", "", "string", true),
+      // AI服务API密钥
+      aiMatchPrompt: this.get("AI_MATCH_PROMPT", this.DEFAULT_AI_MATCH_PROMPT, "string"),
+      // AI自动匹配提示词模板
       rememberLastSelect: this.get("REMEMBER_LAST_SELECT", true, "boolean"),
       // 是否记住手动选择结果，用于match自动匹配时优选上次的选择（默认 true，记住）
       MAX_LAST_SELECT_MAP: this.get("MAX_LAST_SELECT_MAP", 100, "number"),
@@ -696,13 +738,50 @@ __publicField(Envs, "env");
 // 记录获取过的环境变量
 __publicField(Envs, "originalEnvVars", /* @__PURE__ */ new Map());
 __publicField(Envs, "accessedEnvVars", /* @__PURE__ */ new Map());
-__publicField(Envs, "VOD_ALLOWED_PLATFORMS", ["qiyi", "bilibili1", "imgo", "youku", "qq", "sohu", "leshi", "xigua"]);
+__publicField(Envs, "VOD_ALLOWED_PLATFORMS", ["qiyi", "bilibili1", "imgo", "youku", "qq", "migu", "sohu", "leshi", "xigua", "maiduidui"]);
 // vod允许的播放平台
-__publicField(Envs, "ALLOWED_PLATFORMS", ["qiyi", "bilibili1", "imgo", "youku", "qq", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "animeko", "custom"]);
+__publicField(Envs, "ALLOWED_PLATFORMS", ["qiyi", "bilibili1", "imgo", "youku", "qq", "migu", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "maiduidui", "animeko", "custom"]);
 // 全部源允许的播放平台
-__publicField(Envs, "ALLOWED_SOURCES", ["360", "vod", "tmdb", "douban", "tencent", "youku", "iqiyi", "imgo", "bilibili", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "animeko", "custom"]);
+__publicField(Envs, "ALLOWED_SOURCES", ["360", "vod", "tmdb", "douban", "tencent", "youku", "iqiyi", "imgo", "bilibili", "migu", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "maiduidui", "animeko", "custom"]);
 // 允许的源
-__publicField(Envs, "MERGE_ALLOWED_SOURCES", ["tencent", "youku", "iqiyi", "imgo", "bilibili", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "animeko"]);
+__publicField(Envs, "MERGE_ALLOWED_SOURCES", ["tencent", "youku", "iqiyi", "imgo", "bilibili", "migu", "renren", "hanjutv", "bahamut", "dandan", "sohu", "leshi", "xigua", "maiduidui", "animeko"]);
+// 允许的源合并
+__publicField(Envs, "DEFAULT_AI_MATCH_PROMPT", `\u4F60\u662F\u4E00\u4E2A\u4E13\u4E1A\u7684\u5F71\u89C6\u5339\u914D\u4E13\u5BB6\uFF0C\u4F60\u7684\u7684\u4EFB\u52A1\u662F\u6839\u636E\u7528\u6237\u63D0\u4F9B\u7684 JSON \u6570\u636E\uFF0C\u4ECE\u5019\u9009\u52A8\u6F2B\u5217\u8868\u4E2D\u5339\u914D\u6700\u7B26\u5408\u6761\u4EF6\u7684\u52A8\u6F2B\u53CA\u96C6\u6570\u3002
+
+\u8F93\u5165\u5B57\u6BB5\u8BF4\u660E\uFF1A
+- title: \u67E5\u8BE2\u6807\u9898
+- season: \u5B63\u6570\uFF08\u53EF\u4E3A null\uFF09
+- episode: \u96C6\u6570\uFF08\u53EF\u4E3A null\uFF09
+- year: \u5E74\u4EFD\uFF08\u53EF\u4E3A null\uFF09
+- dynamicPlatformOrder: \u5E73\u53F0\u504F\u597D\u5217\u8868\uFF08\u53EF\u4E3A null\uFF09
+- preferAnimeId: \u504F\u597D\u52A8\u6F2B ID\uFF08\u53EF\u4E3A null\uFF09
+- animes: \u5019\u9009\u52A8\u6F2B\u5217\u8868
+  - animeId: \u52A8\u6F2Bid
+    animeTitle: \u52A8\u6F2B\u6807\u9898\uFF0C(\u5E74\u4EFD)\u524D\u9762\u624D\u662F\u771F\u5B9E\u7684\u6807\u9898
+    type: \u7C7B\u578B
+    startDate: \u53D1\u5E03\u65E5\u671F\uFF0C\u6709\u5E74\u4EFD
+    episodeCount: \u603B\u96C6\u6570
+    source: \u5F39\u5E55\u6765\u6E90
+
+\u5339\u914D\u89C4\u5219 (\u6309\u4F18\u5148\u7EA7\u6392\u5E8F):
+1. \u5982\u679CpreferAnimeId\u975E\u7A7A\uFF0C\u4E14animes\u5B58\u5728\u8BE5animeId\uFF0C\u5219\u8FD4\u56DE\u8BE5id\u5BF9\u5E94\u7684anime\u548Cepisode
+2. \u6807\u9898\u76F8\u4F3C\u5EA6: \u4F18\u5148\u5339\u914D\u6807\u9898\u76F8\u4F3C\u5EA6\u6700\u9AD8\u7684\u6761\u76EE
+3. \u5B63\u5EA6\u4E25\u683C\u5339\u914D: \u5982\u679C\u6307\u5B9A\u4E86\u5B63\u5EA6,\u5FC5\u987B\u4E25\u683C\u5339\u914D
+4. \u7C7B\u578B\u5339\u914D: episode\u4E3A\u7A7A\u5219\u4F18\u5148\u5339\u914D\u7535\u5F71\uFF0C\u975E\u7A7A\u5219\u5339\u914D\u7535\u89C6\u5267\u7B49
+5. \u5E74\u4EFD\u63A5\u8FD1: \u4F18\u5148\u9009\u62E9\u5E74\u4EFD\u63A5\u8FD1\u7684
+6. \u5E73\u53F0\u5339\u914D\uFF1A\u5982\u679C\u6709\u591A\u4E2A\u9AD8\u5EA6\u76F8\u4F3C\u7684\u7ED3\u679C\u4E14dynamicPlatformOrder\u975E\u7A7A\uFF0C\u5219\u4ECE\u524D\u5F80\u540E\u9009\u62E9\u76F8\u5BF9\u5E94\u7684\u5E73\u53F0
+7. \u96C6\u6570\u5B8C\u6574: \u5982\u679C\u6709\u591A\u4E2A\u9AD8\u5EA6\u76F8\u4F3C\u7684\u7ED3\u679C,\u9009\u62E9\u96C6\u6570\u6700\u5B8C\u6574\u7684
+
+\u8BF7\u5206\u6790\u54EA\u4E2A\u52A8\u6F2B\u6700\u7B26\u5408\u67E5\u8BE2\u6761\u4EF6\uFF0C\u5982\u679C\u6307\u5B9A\u4E86\u5B63\u6570\u548C\u96C6\u6570\uFF0C\u8BF7\u4E5F\u8FD4\u56DE\u5BF9\u5E94\u7684\u96C6\u4FE1\u606F\u3002
+\u8BF7\u4E25\u683C\u6309\u7167\u4EE5\u4E0B JSON \u683C\u5F0F\u8FD4\u56DE\u7ED3\u679C\uFF0C\u4E0D\u8981\u5305\u542B\u4EFB\u4F55\u5176\u4ED6\u5185\u5BB9\uFF1A
+{
+  "animeIndex": \u5339\u914D\u7684\u52A8\u6F2B\u5728\u5217\u8868\u4E2D\u7684\u7D22\u5F15(\u4ECE0\u5F00\u59CB) \u6216 null
+}
+
+\u5982\u679C\u6CA1\u6709\u627E\u5230\u5408\u9002\u7684\u5339\u914D\uFF0C\u8FD4\u56DE\uFF1A
+{
+  "animeIndex": null
+}`);
 
 // danmu_api/configs/globals.js
 var Globals = {
@@ -712,10 +791,12 @@ var Globals = {
   originalEnvVars: {},
   accessedEnvVars: {},
   // 静态常量
-  VERSION: "1.13.6",
+  VERSION: "1.15.3",
   MAX_LOGS: 1e3,
   // 日志存储，最多保存 1000 行
   MAX_ANIMES: 100,
+  MAX_RECORDS: 100,
+  // 请求记录最大数量
   // 运行时状态
   animes: [],
   episodeIds: [],
@@ -730,16 +811,26 @@ var Globals = {
   // 本地缓存是否已初始化
   redisValid: false,
   // redis是否生效
+  localRedisValid: false,
+  // 本地redis是否生效
+  aiValid: false,
+  // AI配置是否生效
   redisCacheInitialized: false,
   // redis 缓存是否已初始化
   lastSelectMap: /* @__PURE__ */ new Map(),
   // 存储查询关键字上次选择的animeId，用于下次match自动匹配时优先选择该anime
+  reqRecords: [],
+  // 记录请求历史，包括接口/参数/请求时间
+  todayReqNum: 0,
+  // 今日请求数量统计
   lastHashes: {
     // 存储上一次各变量哈希值
     animes: null,
     episodeIds: null,
     episodeNum: null,
-    lastSelectMap: null
+    lastSelectMap: null,
+    reqRecords: null,
+    todayReqNum: null
   },
   searchCache: /* @__PURE__ */ new Map(),
   // 搜索结果缓存，存储格式：{ keyword: { results, timestamp } }
@@ -848,6 +939,7 @@ var Globals = {
         if (prop === "version") return self.VERSION;
         if (prop === "maxLogs") return self.MAX_LOGS;
         if (prop === "maxAnimes") return self.MAX_ANIMES;
+        if (prop === "maxRecords") return self.MAX_RECORDS;
         if (prop === "maxLastSelectMap") return self.MAX_LAST_SELECT_MAP;
         if (prop === "makeProxyUrl") return self.makeProxyUrl.bind(self);
         return self[prop];
@@ -1057,7 +1149,7 @@ async function httpPost(url, body, options = {}) {
     } else {
       log("info", `[\u8BF7\u6C42\u6A21\u62DF] HTTP POST: ${url}`);
     }
-    const timeout = parseInt(globals.vodRequestTimeout || "5000", 10) || 5e3;
+    const timeout = parseInt(options.timeout || globals.vodRequestTimeout || "5000", 10) || 5e3;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
     linkSignal(options.signal, controller);
@@ -1168,14 +1260,15 @@ function xmlResponse(data, status = 200) {
     }
   });
 }
-function buildQueryString(params) {
+function buildQueryString(params, encode = true) {
+  const encodeFn = encode ? encodeURIComponent : (v) => v;
   let queryString = "";
   for (let key in params) {
     if (params.hasOwnProperty(key)) {
       if (queryString.length > 0) {
         queryString += "&";
       }
-      queryString += encodeURIComponent(key) + "=" + encodeURIComponent(params[key]);
+      queryString += encodeFn(key) + "=" + encodeFn(params[key]);
     }
   }
   return queryString;
@@ -1298,10 +1391,6 @@ async function httpGetWithStreamCheck(url, options = {}, checkCallback) {
         checkBuffer += chunkText;
         if (!checkCallback(checkBuffer)) {
           log("info", `[\u6D41\u5F0F\u8BF7\u6C42] \u55C5\u63A2\u5230\u65E0\u6548\u7279\u5F81(\u5DF2\u8BFB${receivedLength}\u5B57\u8282),\u7ACB\u5373\u7194\u65AD`);
-          try {
-            await reader.cancel("Stream aborted by user check");
-          } catch (e) {
-          }
           controller.abort();
           isAborted = true;
           break;
@@ -1335,6 +1424,51 @@ async function httpGetWithStreamCheck(url, options = {}, checkCallback) {
     log("error", `[\u6D41\u5F0F\u8BF7\u6C42] \u5931\u8D25: ${error.message}`);
     return null;
   }
+}
+
+// danmu_api/utils/zh-util.js
+function charPYStr() {
+  return "\u9515\u7691\u853C\u788D\u7231\u55F3\u5AD2\u7477\u66A7\u972D\u8C19\u94F5\u9E4C\u80AE\u8884\u5965\u5AAA\u9A9C\u9CCC\u575D\u7F62\u94AF\u6446\u8D25\u5457\u9881\u529E\u7ECA\u94A3\u5E2E\u7ED1\u9551\u8C24\u5265\u9971\u5B9D\u62A5\u9C8D\u9E28\u9F85\u8F88\u8D1D\u94A1\u72C8\u5907\u60EB\u9E4E\u8D32\u951B\u7EF7\u7B14\u6BD5\u6BD9\u5E01\u95ED\u835C\u54D4\u6ED7\u94CB\u7B5A\u8DF8\u8FB9\u7F16\u8D2C\u53D8\u8FA9\u8FAB\u82C4\u7F0F\u7B3E\u6807\u9AA0\u98D1\u98D9\u9556\u9573\u9CD4\u9CD6\u522B\u762A\u6FD2\u6EE8\u5BBE\u6448\u50A7\u7F24\u69DF\u6BA1\u8191\u9554\u9ACC\u9B13\u997C\u7980\u62E8\u94B5\u94C2\u9A73\u997D\u94B9\u9E41\u8865\u94B8\u8D22\u53C2\u8695\u6B8B\u60ED\u60E8\u707F\u9A96\u9EEA\u82CD\u8231\u4ED3\u6CA7\u5395\u4FA7\u518C\u6D4B\u607B\u5C42\u8BE7\u9538\u4FAA\u9497\u6400\u63BA\u8749\u998B\u8C17\u7F20\u94F2\u4EA7\u9610\u98A4\u5181\u8C04\u8C36\u8487\u5FCF\u5A75\u9AA3\u89C7\u7985\u9561\u573A\u5C1D\u957F\u507F\u80A0\u5382\u7545\u4F25\u82CC\u6005\u960A\u9CB3\u949E\u8F66\u5F7B\u7817\u5C18\u9648\u886C\u4F27\u8C0C\u6987\u789C\u9F80\u6491\u79F0\u60E9\u8BDA\u9A8B\u67A8\u67FD\u94D6\u94DB\u75F4\u8FDF\u9A70\u803B\u9F7F\u70BD\u996C\u9E31\u51B2\u51B2\u866B\u5BA0\u94F3\u7574\u8E0C\u7B79\u7EF8\u4FE6\u5E31\u96E0\u6A71\u53A8\u9504\u96CF\u7840\u50A8\u89E6\u5904\u520D\u7ECC\u8E70\u4F20\u948F\u75AE\u95EF\u521B\u6006\u9524\u7F0D\u7EAF\u9E51\u7EF0\u8F8D\u9F8A\u8F9E\u8BCD\u8D50\u9E5A\u806A\u8471\u56F1\u4ECE\u4E1B\u82C1\u9AA2\u679E\u51D1\u8F8F\u8E7F\u7A9C\u64BA\u9519\u9509\u9E7E\u8FBE\u54D2\u9791\u5E26\u8D37\u9A80\u7ED0\u62C5\u5355\u90F8\u63B8\u80C6\u60EE\u8BDE\u5F39\u6B9A\u8D55\u7605\u7BAA\u5F53\u6321\u515A\u8361\u6863\u8C20\u7800\u88C6\u6363\u5C9B\u7977\u5BFC\u76D7\u7118\u706F\u9093\u956B\u654C\u6DA4\u9012\u7F14\u7C74\u8BCB\u8C1B\u7EE8\u89CC\u955D\u98A0\u70B9\u57AB\u7535\u5DC5\u94BF\u766B\u9493\u8C03\u94EB\u9CB7\u8C0D\u53E0\u9CBD\u9489\u9876\u952D\u8BA2\u94E4\u4E22\u94E5\u4E1C\u52A8\u680B\u51BB\u5CBD\u9E2B\u7AA6\u728A\u72EC\u8BFB\u8D4C\u9540\u6E0E\u691F\u724D\u7B03\u9EE9\u953B\u65AD\u7F0E\u7C16\u5151\u961F\u5BF9\u603C\u9566\u5428\u987F\u949D\u7096\u8DB8\u593A\u5815\u94CE\u9E45\u989D\u8BB9\u6076\u997F\u8C14\u57A9\u960F\u8F6D\u9507\u9537\u9E57\u989A\u989B\u9CC4\u8BF6\u513F\u5C14\u9975\u8D30\u8FE9\u94D2\u9E38\u9C95\u53D1\u7F5A\u9600\u73D0\u77FE\u9492\u70E6\u8D29\u996D\u8BBF\u7EBA\u94AB\u9C82\u98DE\u8BFD\u5E9F\u8D39\u7EEF\u9544\u9CB1\u7EB7\u575F\u594B\u6124\u7CAA\u507E\u4E30\u67AB\u950B\u98CE\u75AF\u51AF\u7F1D\u8BBD\u51E4\u6CA3\u80A4\u8F90\u629A\u8F85\u8D4B\u590D\u8D1F\u8BA3\u5987\u7F1A\u51EB\u9A78\u7EC2\u7ECB\u8D59\u9EB8\u9C8B\u9CC6\u9486\u8BE5\u9499\u76D6\u8D45\u6746\u8D76\u79C6\u8D63\u5C34\u64C0\u7EC0\u5188\u521A\u94A2\u7EB2\u5C97\u6206\u9550\u777E\u8BF0\u7F1F\u9506\u6401\u9E3D\u9601\u94EC\u4E2A\u7EA5\u9549\u988D\u7ED9\u4E98\u8D53\u7EE0\u9CA0\u9F9A\u5BAB\u5DE9\u8D21\u94A9\u6C9F\u82DF\u6784\u8D2D\u591F\u8BDF\u7F11\u89CF\u86CA\u987E\u8BC2\u6BC2\u94B4\u9522\u9E2A\u9E44\u9E58\u5250\u6302\u9E39\u63B4\u5173\u89C2\u9986\u60EF\u8D2F\u8BD6\u63BC\u9E73\u9CCF\u5E7F\u72B7\u89C4\u5F52\u9F9F\u95FA\u8F68\u8BE1\u8D35\u523D\u5326\u523F\u59AB\u6867\u9C91\u9CDC\u8F8A\u6EDA\u886E\u7EF2\u9CA7\u9505\u56FD\u8FC7\u57DA\u5459\u5E3C\u6901\u8748\u94EA\u9A87\u97E9\u6C49\u961A\u7ED7\u9889\u53F7\u704F\u98A2\u9602\u9E64\u8D3A\u8BC3\u9616\u86CE\u6A2A\u8F70\u9E3F\u7EA2\u9EC9\u8BA7\u836D\u95F3\u9C8E\u58F6\u62A4\u6CAA\u6237\u6D52\u9E55\u54D7\u534E\u753B\u5212\u8BDD\u9A85\u6866\u94E7\u6000\u574F\u6B22\u73AF\u8FD8\u7F13\u6362\u5524\u75EA\u7115\u6DA3\u5942\u7F33\u953E\u9CA9\u9EC4\u8C0E\u9CC7\u6325\u8F89\u6BC1\u8D3F\u79FD\u4F1A\u70E9\u6C47\u8BB3\u8BF2\u7ED8\u8BD9\u835F\u54D5\u6D4D\u7F0B\u73F2\u6656\u8364\u6D51\u8BE8\u9984\u960D\u83B7\u8D27\u7978\u94AC\u956C\u51FB\u673A\u79EF\u9965\u8FF9\u8BA5\u9E21\u7EE9\u7F09\u6781\u8F91\u7EA7\u6324\u51E0\u84DF\u5242\u6D4E\u8BA1\u8BB0\u9645\u7EE7\u7EAA\u8BA6\u8BD8\u8360\u53FD\u54DC\u9AA5\u7391\u89CA\u9F51\u77F6\u7F81\u867F\u8DFB\u9701\u9C9A\u9CAB\u5939\u835A\u988A\u8D3E\u94BE\u4EF7\u9A7E\u90CF\u6D43\u94D7\u9553\u86F2\u6B7C\u76D1\u575A\u7B3A\u95F4\u8270\u7F04\u8327\u68C0\u78B1\u7877\u62E3\u6361\u7B80\u4FED\u51CF\u8350\u69DB\u9274\u8DF5\u8D31\u89C1\u952E\u8230\u5251\u996F\u6E10\u6E85\u6DA7\u8C0F\u7F23\u620B\u622C\u7751\u9E63\u7B15\u9CA3\u97AF\u5C06\u6D46\u848B\u6868\u5956\u8BB2\u9171\u7EDB\u7F30\u80F6\u6D47\u9A84\u5A07\u6405\u94F0\u77EB\u4FA5\u811A\u997A\u7F34\u7EDE\u8F7F\u8F83\u6322\u5CE4\u9E6A\u9C9B\u9636\u8282\u6D01\u7ED3\u8BEB\u5C4A\u7596\u988C\u9C92\u7D27\u9526\u4EC5\u8C28\u8FDB\u664B\u70EC\u5C3D\u52B2\u8346\u830E\u537A\u8369\u9991\u7F19\u8D46\u89D0\u9CB8\u60CA\u7ECF\u9888\u9759\u955C\u5F84\u75C9\u7ADE\u51C0\u522D\u6CFE\u8FF3\u5F2A\u80EB\u9753\u7EA0\u53A9\u65E7\u9604\u9E20\u9E6B\u9A79\u4E3E\u636E\u952F\u60E7\u5267\u8BB5\u5C66\u6989\u98D3\u949C\u9514\u7AAD\u9F83\u9E43\u7EE2\u9529\u954C\u96BD\u89C9\u51B3\u7EDD\u8C32\u73CF\u94A7\u519B\u9A8F\u76B2\u5F00\u51EF\u5240\u57B2\u5FFE\u607A\u94E0\u9534\u9F9B\u95F6\u94AA\u94D0\u9897\u58F3\u8BFE\u9A92\u7F02\u8F72\u94B6\u951E\u9894\u57A6\u6073\u9F88\u94FF\u62A0\u5E93\u88E4\u55BE\u5757\u4FA9\u90D0\u54D9\u810D\u5BBD\u72EF\u9ACB\u77FF\u65F7\u51B5\u8BD3\u8BF3\u909D\u5739\u7EA9\u8D36\u4E8F\u5CBF\u7AA5\u9988\u6E83\u532E\u8489\u6126\u8069\u7BD1\u9603\u951F\u9CB2\u6269\u9614\u86F4\u8721\u814A\u83B1\u6765\u8D56\u5D03\u5F95\u6D9E\u6FD1\u8D49\u7750\u94FC\u765E\u7C41\u84DD\u680F\u62E6\u7BEE\u9611\u5170\u6F9C\u8C30\u63FD\u89C8\u61D2\u7F06\u70C2\u6EE5\u5C9A\u6984\u6593\u9567\u8934\u7405\u9606\u9512\u635E\u52B3\u6D9D\u5520\u5D02\u94D1\u94F9\u75E8\u4E50\u9CD3\u956D\u5792\u7C7B\u6CEA\u8BD4\u7F27\u7BF1\u72F8\u79BB\u9CA4\u793C\u4E3D\u5389\u52B1\u783E\u5386\u6CA5\u96B6\u4FEA\u90E6\u575C\u82C8\u8385\u84E0\u5456\u9026\u9A8A\u7F21\u67A5\u680E\u8F79\u783A\u9502\u9E42\u75A0\u7C9D\u8DDE\u96F3\u9CA1\u9CE2\u4FE9\u8054\u83B2\u8FDE\u9570\u601C\u6D9F\u5E18\u655B\u8138\u94FE\u604B\u70BC\u7EC3\u8539\u5941\u6F4B\u740F\u6B93\u88E2\u88E3\u9CA2\u7CAE\u51C9\u4E24\u8F86\u8C05\u9B49\u7597\u8FBD\u9563\u7F2D\u948C\u9E69\u730E\u4E34\u90BB\u9CDE\u51DB\u8D41\u853A\u5EEA\u6AA9\u8F9A\u8E8F\u9F84\u94C3\u7075\u5CAD\u9886\u7EEB\u68C2\u86CF\u9CAE\u998F\u5218\u6D4F\u9A9D\u7EFA\u954F\u9E68\u9F99\u804B\u5499\u7B3C\u5784\u62E2\u9647\u830F\u6CF7\u73D1\u680A\u80E7\u783B\u697C\u5A04\u6402\u7BD3\u507B\u848C\u55BD\u5D5D\u9542\u7618\u8027\u877C\u9AC5\u82A6\u5362\u9885\u5E90\u7089\u63B3\u5364\u864F\u9C81\u8D42\u7984\u5F55\u9646\u5786\u64B8\u565C\u95FE\u6CF8\u6E0C\u680C\u6A79\u8F73\u8F82\u8F98\u6C07\u80EA\u9E2C\u9E6D\u823B\u9C88\u5CE6\u631B\u5B6A\u6EE6\u4E71\u8114\u5A08\u683E\u9E3E\u92AE\u62A1\u8F6E\u4F26\u4ED1\u6CA6\u7EB6\u8BBA\u56F5\u841D\u7F57\u903B\u9523\u7BA9\u9AA1\u9A86\u7EDC\u8366\u7321\u6CFA\u6924\u8136\u9559\u9A74\u5415\u94DD\u4FA3\u5C61\u7F15\u8651\u6EE4\u7EFF\u6988\u891B\u950A\u5452\u5988\u739B\u7801\u8682\u9A6C\u9A82\u5417\u551B\u5B37\u6769\u4E70\u9EA6\u5356\u8FC8\u8109\u52A2\u7792\u9992\u86EE\u6EE1\u8C29\u7F26\u9558\u98A1\u9CD7\u732B\u951A\u94C6\u8D38\u4E48\u6CA1\u9541\u95E8\u95F7\u4EEC\u626A\u7116\u61D1\u9494\u9530\u68A6\u772F\u8C1C\u5F25\u89C5\u5E42\u8288\u8C27\u7315\u7962\u7EF5\u7F05\u6E11\u817C\u9EFE\u5E99\u7F08\u7F2A\u706D\u60AF\u95FD\u95F5\u7F17\u9E23\u94ED\u8C2C\u8C1F\u84E6\u998D\u6B81\u9546\u8C0B\u4EA9\u94BC\u5450\u94A0\u7EB3\u96BE\u6320\u8111\u607C\u95F9\u94D9\u8BB7\u9981\u5185\u62DF\u817B\u94CC\u9CB5\u64B5\u8F87\u9CB6\u917F\u9E1F\u8311\u8885\u8042\u556E\u954A\u954D\u9667\u8616\u55EB\u989F\u8E51\u67E0\u72DE\u5B81\u62E7\u6CDE\u82CE\u549B\u804D\u94AE\u7EBD\u8113\u6D53\u519C\u4FAC\u54DD\u9A7D\u9495\u8BFA\u50A9\u759F\u6B27\u9E25\u6BB4\u5455\u6CA4\u8BB4\u6004\u74EF\u76D8\u8E52\u5E9E\u629B\u75B1\u8D54\u8F94\u55B7\u9E4F\u7EB0\u7F74\u94CD\u9A97\u8C1D\u9A88\u98D8\u7F25\u9891\u8D2B\u5AD4\u82F9\u51ED\u8BC4\u6CFC\u9887\u948B\u6251\u94FA\u6734\u8C31\u9564\u9568\u6816\u8110\u9F50\u9A91\u5C82\u542F\u6C14\u5F03\u8BAB\u8572\u9A90\u7EEE\u6864\u789B\u9880\u9883\u9CCD\u7275\u948E\u94C5\u8FC1\u7B7E\u8C26\u94B1\u94B3\u6F5C\u6D45\u8C34\u5811\u4F65\u8368\u60AD\u9A9E\u7F31\u6920\u94A4\u67AA\u545B\u5899\u8537\u5F3A\u62A2\u5AF1\u6A2F\u6217\u709D\u9516\u9535\u956A\u7F9F\u8DC4\u9539\u6865\u4E54\u4FA8\u7FD8\u7A8D\u8BEE\u8C2F\u835E\u7F32\u7857\u8DF7\u7A83\u60EC\u9532\u7BA7\u94A6\u4EB2\u5BDD\u9513\u8F7B\u6C22\u503E\u9877\u8BF7\u5E86\u63FF\u9CAD\u743C\u7A77\u8315\u86F1\u5DEF\u8D47\u866E\u9CC5\u8D8B\u533A\u8EAF\u9A71\u9F8B\u8BCE\u5C96\u9612\u89D1\u9E32\u98A7\u6743\u529D\u8BE0\u7EFB\u8F81\u94E8\u5374\u9E4A\u786E\u9615\u9619\u60AB\u8BA9\u9976\u6270\u7ED5\u835B\u5A06\u6861\u70ED\u97E7\u8BA4\u7EAB\u996A\u8F6B\u8363\u7ED2\u5D58\u877E\u7F1B\u94F7\u98A6\u8F6F\u9510\u86AC\u95F0\u6DA6\u6D12\u8428\u98D2\u9CC3\u8D5B\u4F1E\u6BF5\u7CC1\u4E27\u9A9A\u626B\u7F2B\u6DA9\u556C\u94EF\u7A51\u6740\u5239\u7EB1\u94E9\u9CA8\u7B5B\u6652\u917E\u5220\u95EA\u9655\u8D61\u7F2E\u8BAA\u59D7\u9A9F\u9490\u9CDD\u5892\u4F24\u8D4F\u57A7\u6B87\u89DE\u70E7\u7ECD\u8D4A\u6444\u6151\u8BBE\u538D\u6EE0\u7572\u7EC5\u5BA1\u5A76\u80BE\u6E17\u8BDC\u8C02\u6E16\u58F0\u7EF3\u80DC\u5E08\u72EE\u6E7F\u8BD7\u65F6\u8680\u5B9E\u8BC6\u9A76\u52BF\u9002\u91CA\u9970\u89C6\u8BD5\u8C25\u57D8\u83B3\u5F11\u8F7C\u8D33\u94C8\u9CA5\u5BFF\u517D\u7EF6\u67A2\u8F93\u4E66\u8D4E\u5C5E\u672F\u6811\u7AD6\u6570\u6445\u7EBE\u5E05\u95E9\u53CC\u8C01\u7A0E\u987A\u8BF4\u7855\u70C1\u94C4\u4E1D\u9972\u53AE\u9A77\u7F0C\u9536\u9E36\u8038\u6002\u9882\u8BBC\u8BF5\u64DE\u85AE\u998A\u98D5\u953C\u82CF\u8BC9\u8083\u8C21\u7A23\u867D\u968F\u7EE5\u5C81\u8C07\u5B59\u635F\u7B0B\u836A\u72F2\u7F29\u7410\u9501\u5522\u7743\u736D\u631E\u95FC\u94CA\u9CCE\u53F0\u6001\u949B\u9C90\u644A\u8D2A\u762B\u6EE9\u575B\u8C2D\u8C08\u53F9\u6619\u94BD\u952C\u9878\u6C64\u70EB\u50A5\u9967\u94F4\u9557\u6D9B\u7EE6\u8BA8\u97EC\u94FD\u817E\u8A8A\u9511\u9898\u4F53\u5C49\u7F07\u9E48\u9617\u6761\u7C9C\u9F86\u9CA6\u8D34\u94C1\u5385\u542C\u70C3\u94DC\u7EDF\u6078\u5934\u94AD\u79C3\u56FE\u948D\u56E2\u629F\u9893\u8715\u9968\u8131\u9E35\u9A6E\u9A7C\u692D\u7BA8\u9F0D\u889C\u5A32\u817D\u5F2F\u6E7E\u987D\u4E07\u7EA8\u7EFE\u7F51\u8F8B\u97E6\u8FDD\u56F4\u4E3A\u6F4D\u7EF4\u82C7\u4F1F\u4F2A\u7EAC\u8C13\u536B\u8BFF\u5E0F\u95F1\u6CA9\u6DA0\u73AE\u97EA\u709C\u9C94\u6E29\u95FB\u7EB9\u7A33\u95EE\u960C\u74EE\u631D\u8717\u6DA1\u7A9D\u5367\u83B4\u9F8C\u545C\u94A8\u4E4C\u8BEC\u65E0\u829C\u5434\u575E\u96FE\u52A1\u8BEF\u90AC\u5E91\u6003\u59A9\u9A9B\u9E49\u9E5C\u9521\u727A\u88AD\u4E60\u94E3\u620F\u7EC6\u9969\u960B\u73BA\u89CB\u867E\u8F96\u5CE1\u4FA0\u72ED\u53A6\u5413\u7856\u9C9C\u7EA4\u8D24\u8854\u95F2\u663E\u9669\u73B0\u732E\u53BF\u9985\u7FA1\u5BAA\u7EBF\u82CB\u83B6\u85D3\u5C98\u7303\u5A34\u9E47\u75EB\u869D\u7C7C\u8DF9\u53A2\u9576\u4E61\u8BE6\u54CD\u9879\u8297\u9977\u9AA7\u7F03\u98E8\u8427\u56A3\u9500\u6653\u5578\u54D3\u6F47\u9A81\u7EE1\u67AD\u7BAB\u534F\u631F\u643A\u80C1\u8C10\u5199\u6CFB\u8C22\u4EB5\u64B7\u7EC1\u7F2C\u950C\u8845\u5174\u9649\u8365\u51F6\u6C79\u9508\u7EE3\u9990\u9E3A\u865A\u5618\u987B\u8BB8\u53D9\u7EEA\u7EED\u8BE9\u987C\u8F69\u60AC\u9009\u7663\u7EDA\u8C16\u94C9\u955F\u5B66\u8C11\u6CF6\u9CD5\u52CB\u8BE2\u5BFB\u9A6F\u8BAD\u8BAF\u900A\u57D9\u6D54\u9C9F\u538B\u9E26\u9E2D\u54D1\u4E9A\u8BB6\u57AD\u5A05\u6860\u6C29\u9609\u70DF\u76D0\u4E25\u5CA9\u989C\u960E\u8273\u538C\u781A\u5F66\u8C1A\u9A8C\u53A3\u8D5D\u4FE8\u5156\u8C33\u6079\u95EB\u917D\u9B47\u990D\u9F39\u9E2F\u6768\u626C\u75A1\u9633\u75D2\u517B\u6837\u7080\u7476\u6447\u5C27\u9065\u7A91\u8C23\u836F\u8F7A\u9E5E\u9CD0\u7237\u9875\u4E1A\u53F6\u9765\u8C12\u90BA\u6654\u70E8\u533B\u94F1\u9890\u9057\u4EEA\u8681\u827A\u4EBF\u5FC6\u4E49\u8BE3\u8BAE\u8C0A\u8BD1\u5F02\u7ECE\u8BD2\u5453\u5CC4\u9974\u603F\u9A7F\u7F22\u8F76\u8D3B\u9487\u9552\u9571\u7617\u8223\u836B\u9634\u94F6\u996E\u9690\u94DF\u763E\u6A31\u5A74\u9E70\u5E94\u7F28\u83B9\u8424\u8425\u8367\u8747\u8D62\u9896\u8314\u83BA\u8426\u84E5\u6484\u5624\u6EE2\u6F46\u748E\u9E66\u763F\u988F\u7F42\u54DF\u62E5\u4F63\u75C8\u8E0A\u548F\u955B\u4F18\u5FE7\u90AE\u94C0\u72B9\u8BF1\u83B8\u94D5\u9C7F\u8206\u9C7C\u6E14\u5A31\u4E0E\u5C7F\u8BED\u72F1\u8A89\u9884\u9A6D\u4F1B\u4FE3\u8C00\u8C15\u84E3\u5D5B\u996B\u9608\u59AA\u7EA1\u89CE\u6B24\u94B0\u9E46\u9E6C\u9F89\u9E33\u6E0A\u8F95\u56ED\u5458\u5706\u7F18\u8FDC\u6A7C\u9E22\u9F0B\u7EA6\u8DC3\u94A5\u7CA4\u60A6\u9605\u94BA\u90E7\u5300\u9668\u8FD0\u8574\u915D\u6655\u97F5\u90D3\u82B8\u607D\u6120\u7EAD\u97EB\u6B92\u6C32\u6742\u707E\u8F7D\u6512\u6682\u8D5E\u74D2\u8DB1\u933E\u8D43\u810F\u9A75\u51FF\u67A3\u8D23\u62E9\u5219\u6CFD\u8D5C\u5567\u5E3B\u7BA6\u8D3C\u8C2E\u8D60\u7EFC\u7F2F\u8F67\u94E1\u95F8\u6805\u8BC8\u658B\u503A\u6BE1\u76CF\u65A9\u8F97\u5D2D\u6808\u6218\u7EFD\u8C35\u5F20\u6DA8\u5E10\u8D26\u80C0\u8D75\u8BCF\u948A\u86F0\u8F99\u9517\u8FD9\u8C2A\u8F84\u9E67\u8D1E\u9488\u4FA6\u8BCA\u9547\u9635\u6D48\u7F1C\u6862\u8F78\u8D48\u796F\u9E29\u6323\u7741\u72F0\u4E89\u5E27\u75C7\u90D1\u8BC1\u8BE4\u5CE5\u94B2\u94EE\u7B5D\u7EC7\u804C\u6267\u7EB8\u631A\u63B7\u5E1C\u8D28\u6EDE\u9A98\u6809\u6800\u8F75\u8F7E\u8D3D\u9E37\u86F3\u7D77\u8E2C\u8E2F\u89EF\u949F\u7EC8\u79CD\u80BF\u4F17\u953A\u8BCC\u8F74\u76B1\u663C\u9AA4\u7EA3\u7EC9\u732A\u8BF8\u8BDB\u70DB\u77A9\u5631\u8D2E\u94F8\u9A7B\u4F2B\u69E0\u94E2\u4E13\u7816\u8F6C\u8D5A\u556D\u9994\u989E\u6869\u5E84\u88C5\u5986\u58EE\u72B6\u9525\u8D58\u5760\u7F00\u9A93\u7F12\u8C06\u51C6\u7740\u6D4A\u8BFC\u956F\u5179\u8D44\u6E0D\u8C18\u7F01\u8F8E\u8D40\u7726\u9531\u9F87\u9CBB\u8E2A\u603B\u7EB5\u506C\u90B9\u8BF9\u9A7A\u9CB0\u8BC5\u7EC4\u955E\u94BB\u7F35\u8E9C\u9CDF\u7FF1\u5E76\u535C\u6C89\u4E11\u6DC0\u8FED\u6597\u8303\u5E72\u768B\u7845\u67DC\u540E\u4F19\u79F8\u6770\u8BC0\u5938\u91CC\u91CC\u51CC\u4E48\u9709\u637B\u51C4\u6266\u5723\u5C38\u62AC\u6D82\u6D3C\u5582\u6C61\u9528\u54B8\u874E\u5F5D\u6D8C\u6E38\u5401\u5FA1\u613F\u5CB3\u4E91\u7076\u624E\u672D\u7B51\u4E8E\u5FD7\u6CE8\u51CB\u8BA0\u8C2B\u90C4\u52D0\u51FC\u5742\u5785\u57B4\u57EF\u57DD\u82D8\u836C\u836E\u839C\u83BC\u83F0\u85C1\u63F8\u5412\u5423\u5494\u549D\u54B4\u5658\u567C\u56AF\u5E5E\u5C99\u5D74\u5F77\u5FBC\u72B8\u72CD\u9980\u9987\u9993\u9995\u6123\u61B7\u61D4\u4E2C\u6E86\u6EDF\u6EB7\u6F24\u6F74\u6FB9\u752F\u7E9F\u7ED4\u7EF1\u73C9\u67A7\u684A\u6849\u69D4\u6A65\u8F71\u8F77\u8D4D\u80B7\u80E8\u98DA\u7173\u7145\u7198\u610D\u6DFC\u781C\u78D9\u770D\u949A\u94B7\u94D8\u94DE\u9503\u950D\u950E\u950F\u9518\u951D\u952A\u952B\u953F\u9545\u954E\u9562\u9565\u9569\u9572\u7A06\u9E4B\u9E5B\u9E71\u75AC\u75B4\u75D6\u766F\u88E5\u8941\u8022\u98A5\u87A8\u9EB4\u9C85\u9C86\u9C87\u9C9E\u9CB4\u9CBA\u9CBC\u9CCA\u9CCB\u9CD8\u9CD9\u9792\u97B4\u9F44\u4E2C\u4E3A\u4EB8\u4F17\u4F2A\u4F59\u51A2\u51C0\u51CC\u51FC\u522C\u52CB\u52D0\u52DA\u5364\u53C6\u53C7\u542F\u5494\u54A4\u54B4\u54CC\u54D7\u551D\u5521\u5523\u553F\u556E\u5570\u5574\u5475\u567C\u56AF\u5785\u57A7\u57AF\u57B1\u57D9\u57DD\u5846\u5899\u58F8\u59AB\u59DC\u5A34\u5A73\u5C43\u5CBD\u5CC3\u5CE3\u5D04\u5D5A\u5D5B\u5D74\u5EBC\u5F5F\u5FA1\u610D\u616D\u61B7\u624E\u6266\u631C\u6326\u637B\u63F8\u65F8\u663D\u672D\u684A\u68BC\u68BE\u68C2\u69DA\u6A90\u6C61\u6C93\u6CA8\u6CA9\u6CB5\u6D49\u6D50\u6D55\u6D8C\u6DA2\u6E7F\u6E87\u6EEA\u6F24\u7145\u7173\u7198\u7266\u729F\u72CD\u72DD\u732C\u7399\u739A\u73B1\u73C9\u73CF\u73F0\u740E\u7487\u7572\u75B4\u7606\u7618\u766F\u772C\u7740\u7841\u7845\u7859\u785A\u7877\u78B9\u78D9\u794E\u79FE\u7B5C\u7B7E\u7B93\u7CC7\u7E9F\u7EAE\u7EB4\u7EBB\u7EBC\u7ED6\u7EE4\u7EE6\u7EEC\u7EF1\u7EF9\u7F0A\u7F10\u7F1E\u7F30\u7FD9\u7FDA\u80B7\u810F\u814C\u8158\u816D\u81DC\u8273\u8279\u8359\u839C\u83BC\u841A\u85C1\u866C\u8780\u87CF\u8885\u8886\u88AF\u88C8\u88E5\u8941\u8955\u89C3\u89CD\u8A5F\u8BB1\u8BBB\u8BC7\u8BD0\u8BEA\u8C1E\u8C25\u8C37\u8C6E\u8D20\u8D4D\u8D51\u8D52\u8D57\u8D5F\u8D6A\u8DD6\u8DF6\u8E0A\u8F6A\u8F80\u8F8C\u8F92\u90C1\u90C4\u9166\u9245\u9274\u948E\u9491\u9496\u9498\u94B5\u94BB\u94CF\u94DA\u94E6\u94FB\u9508\u950F\u951C\u9520\u9528\u9533\u953D\u9543\u9548\u9555\u955A\u9560\u9562\u956E\u9574\u95EC\u95F2\u95FF\u9607\u9613\u9618\u961B\u9655\u97B4\u97E8\u988B\u988E\u9892\u9895\u9899\u98A3\u98CF\u98D0\u98D4\u98D6\u98D7\u9964\u9965\u9966\u9973\u9978\u9979\u997B\u997E\u9982\u9983\u9989\u998C\u998E\u9A72\u9A83\u9A89\u9A8D\u9A8E\u9A94\u9A95\u9A99\u9AA6\u9C7D\u9C7E\u9C80\u9C84\u9C89\u9C8A\u9C8C\u9C8F\u9C93\u9C96\u9C97\u9C98\u9C99\u9C9D\u9CAA\u9CAC\u9CAF\u9CB9\u9CBE\u9CBF\u9CC0\u9CC1\u9CC2\u9CC8\u9CC9\u9CD1\u9CD2\u9CDB\u9CE0\u9CE1\u9CE3\u9E24\u9E27\u9E2E\u9E30\u9E34\u9E3B\u9E3C\u9E40\u9E47\u9E4D\u9E50\u9E52\u9E53\u9E54\u9E56\u9E5D\u9E5F\u9E60\u9E61\u9E62\u9E65\u9E6F\u9E72\u9E74\u9EE1\u9F0C\u9F17\u9F81\u9F82\u5FD7\u5236\u54A8\u53EA\u7CFB\u677E\u5C1D\u9762\u5E72\u62FC\u6076\u8D5E\u53D1\u50F5\u81F4\u5978\u83B7\u7EC3\u56DE\u7CFB\u8FF9\u53EA\u8F9F\u677F\u4F60";
+}
+function ftPYStr() {
+  return "\u9312\u769A\u85F9\u7919\u611B\u566F\u5B21\u74A6\u66D6\u9744\u8AF3\u92A8\u9D6A\u9AAF\u8956\u5967\u5ABC\u9A41\u9C32\u58E9\u7F77\u9200\u64FA\u6557\u5504\u9812\u8FA6\u7D46\u9211\u5E6B\u7D81\u938A\u8B17\u525D\u98FD\u5BF6\u5831\u9B91\u9D07\u9F59\u8F29\u8C9D\u92C7\u72FD\u5099\u618A\u9D6F\u8CC1\u931B\u7E43\u7B46\u7562\u6583\u5E63\u9589\u84FD\u55F6\u6F77\u924D\u7BF3\u8E55\u908A\u7DE8\u8CB6\u8B8A\u8FAF\u8FAE\u8290\u7DF6\u7C69\u6A19\u9A43\u98AE\u98C6\u93E2\u9463\u9C3E\u9C49\u5225\u765F\u7015\u6FF1\u8CD3\u64EF\u5110\u7E7D\u6AB3\u6BAF\u81CF\u944C\u9AD5\u9B22\u9905\u7A1F\u64A5\u7F3D\u9251\u99C1\u9911\u9238\u9D53\u88DC\u923D\u8CA1\u53C3\u8836\u6B98\u615A\u6158\u71E6\u9A42\u9EF2\u84BC\u8259\u5009\u6EC4\u5EC1\u5074\u518A\u6E2C\u60FB\u5C64\u8A6B\u9364\u5115\u91F5\u6519\u647B\u87EC\u995E\u8B92\u7E8F\u93DF\u7522\u95E1\u986B\u56C5\u8AC2\u8B96\u8546\u61FA\u5B0B\u9A4F\u8998\u79AA\u9414\u5834\u5617\u9577\u511F\u8178\u5EE0\u66A2\u5000\u8407\u60B5\u95B6\u9BE7\u9214\u8ECA\u5FB9\u7868\u5875\u9673\u896F\u5096\u8AF6\u6AEC\u78E3\u9F54\u6490\u7A31\u61F2\u8AA0\u9A01\u68D6\u6A89\u92EE\u943A\u7661\u9072\u99B3\u6065\u9F52\u71BE\u98ED\u9D1F\u6C96\u885D\u87F2\u5BF5\u9283\u7587\u8E8A\u7C4C\u7DA2\u5114\u5E6C\u8B8E\u6AE5\u5EDA\u92E4\u96DB\u790E\u5132\u89F8\u8655\u82BB\u7D40\u8E95\u50B3\u91E7\u7621\u95D6\u5275\u6134\u9318\u7D9E\u7D14\u9D89\u7DBD\u8F1F\u9F6A\u8FAD\u8A5E\u8CDC\u9DBF\u8070\u8525\u56EA\u5F9E\u53E2\u84EF\u9A44\u6A05\u6E4A\u8F33\u8EA5\u7AC4\u651B\u932F\u92BC\u9E7A\u9054\u5660\u97C3\u5E36\u8CB8\u99D8\u7D3F\u64D4\u55AE\u9132\u64A3\u81BD\u619A\u8A95\u5F48\u6BAB\u8CE7\u7649\u7C1E\u7576\u64CB\u9EE8\u8569\u6A94\u8B9C\u78AD\u8960\u6417\u5CF6\u79B1\u5C0E\u76DC\u71FE\u71C8\u9127\u9419\u6575\u6ECC\u905E\u7DE0\u7CF4\u8A46\u8AE6\u7D88\u89BF\u93D1\u985B\u9EDE\u588A\u96FB\u5DD4\u923F\u7672\u91E3\u8ABF\u929A\u9BDB\u8ADC\u758A\u9C08\u91D8\u9802\u9320\u8A02\u92CC\u4E1F\u92A9\u6771\u52D5\u68DF\u51CD\u5D20\u9D87\u7AC7\u72A2\u7368\u8B80\u8CED\u934D\u7006\u6ADD\u7258\u7BE4\u9EF7\u935B\u65B7\u7DDE\u7C6A\u514C\u968A\u5C0D\u61DF\u9413\u5678\u9813\u920D\u71C9\u8E89\u596A\u58AE\u9438\u9D5D\u984D\u8A1B\u60E1\u9913\u8AE4\u580A\u95BC\u8EDB\u92E8\u9354\u9D9A\u984E\u9853\u9C77\u8A92\u5152\u723E\u990C\u8CB3\u9087\u927A\u9D2F\u9B9E\u767C\u7F70\u95A5\u743A\u792C\u91E9\u7169\u8CA9\u98EF\u8A2A\u7D21\u9201\u9B74\u98DB\u8AB9\u5EE2\u8CBB\u7DCB\u9428\u9BE1\u7D1B\u58B3\u596E\u61A4\u7CDE\u50E8\u8C50\u6953\u92D2\u98A8\u760B\u99AE\u7E2B\u8AF7\u9CF3\u7043\u819A\u8F3B\u64AB\u8F14\u8CE6\u5FA9\u8CA0\u8A03\u5A66\u7E1B\u9CE7\u99D9\u7D31\u7D3C\u8CFB\u9EA9\u9B92\u9C12\u91D3\u8A72\u9223\u84CB\u8CC5\u687F\u8D95\u7A08\u8D1B\u5C37\u641F\u7D3A\u5CA1\u525B\u92FC\u7DB1\u5D17\u6207\u93AC\u776A\u8AA5\u7E1E\u92EF\u64F1\u9D3F\u95A3\u927B\u500B\u7D07\u9398\u6F41\u7D66\u4E99\u8CE1\u7D86\u9BC1\u9F94\u5BAE\u978F\u8CA2\u9264\u6E9D\u830D\u69CB\u8CFC\u5920\u8A6C\u7DF1\u89AF\u8831\u9867\u8A41\u8F42\u9237\u932E\u9D23\u9D60\u9DBB\u526E\u639B\u9D30\u6451\u95DC\u89C0\u9928\u6163\u8CAB\u8A7F\u645C\u9E1B\u9C25\u5EE3\u7377\u898F\u6B78\u9F9C\u95A8\u8ECC\u8A6D\u8CB4\u528A\u532D\u528C\u5AAF\u6A9C\u9BAD\u9C56\u8F25\u6EFE\u889E\u7DC4\u9BC0\u934B\u570B\u904E\u581D\u54BC\u5E57\u69E8\u87C8\u927F\u99ED\u97D3\u6F22\u95DE\u7D4E\u9821\u865F\u705D\u9865\u95A1\u9DB4\u8CC0\u8A36\u95D4\u8823\u6A6B\u8F5F\u9D3B\u7D05\u9ECC\u8A0C\u8452\u958E\u9C5F\u58FA\u8B77\u6EEC\u6236\u6EF8\u9D98\u5629\u83EF\u756B\u5283\u8A71\u9A4A\u6A3A\u93F5\u61F7\u58DE\u6B61\u74B0\u9084\u7DE9\u63DB\u559A\u7613\u7165\u6E19\u5950\u7E6F\u9370\u9BC7\u9EC3\u8B0A\u9C09\u63EE\u8F1D\u6BC0\u8CC4\u7A62\u6703\u71F4\u532F\u8AF1\u8AA8\u7E6A\u8A7C\u8588\u5666\u6FAE\u7E62\u743F\u6689\u8477\u6E3E\u8AE2\u991B\u95BD\u7372\u8CA8\u798D\u9225\u944A\u64CA\u6A5F\u7A4D\u9951\u8DE1\u8B4F\u96DE\u7E3E\u7DDD\u6975\u8F2F\u7D1A\u64E0\u5E7E\u858A\u5291\u6FDF\u8A08\u8A18\u969B\u7E7C\u7D00\u8A10\u8A70\u85BA\u5630\u568C\u9A65\u74A3\u89AC\u9F4F\u78EF\u7F88\u8806\u8E8B\u973D\u9C6D\u9BFD\u593E\u83A2\u9830\u8CC8\u9240\u50F9\u99D5\u90DF\u6D79\u92CF\u93B5\u87EF\u6BB2\u76E3\u5805\u7B8B\u9593\u8271\u7DD8\u7E6D\u6AA2\u583F\u9E7C\u63C0\u64BF\u7C21\u5109\u6E1B\u85A6\u6ABB\u9452\u8E10\u8CE4\u898B\u9375\u8266\u528D\u991E\u6F38\u6FFA\u6F97\u8AEB\u7E11\u6214\u6229\u77BC\u9DBC\u7B67\u9C39\u97C9\u5C07\u6F3F\u8523\u69F3\u734E\u8B1B\u91AC\u7D73\u97C1\u81A0\u6F86\u9A55\u5B0C\u652A\u9278\u77EF\u50E5\u8173\u9903\u7E73\u7D5E\u8F4E\u8F03\u649F\u5DA0\u9DE6\u9BAB\u968E\u7BC0\u6F54\u7D50\u8AA1\u5C46\u7664\u981C\u9B9A\u7DCA\u9326\u50C5\u8B39\u9032\u6649\u71FC\u76E1\u52C1\u834A\u8396\u5DF9\u85CE\u9949\u7E09\u8D10\u89B2\u9BE8\u9A5A\u7D93\u9838\u975C\u93E1\u5F91\u75D9\u7AF6\u51C8\u5244\u6D87\u9015\u5F33\u811B\u975A\u7CFE\u5EC4\u820A\u9B2E\u9CE9\u9DF2\u99D2\u8209\u64DA\u92F8\u61FC\u5287\u8A4E\u5C68\u6AF8\u98B6\u9245\u92E6\u7AB6\u9F5F\u9D51\u7D79\u9308\u942B\u96CB\u89BA\u6C7A\u7D55\u8B4E\u73A8\u921E\u8ECD\u99FF\u76B8\u958B\u51F1\u5274\u584F\u613E\u6137\u93A7\u9347\u9F95\u958C\u9227\u92AC\u9846\u6BBC\u8AB2\u9A0D\u7DD9\u8EFB\u9233\u9301\u9837\u58BE\u61C7\u9F66\u93D7\u6473\u5EAB\u8932\u56B3\u584A\u5108\u9136\u5672\u81BE\u5BEC\u736A\u9AD6\u7926\u66E0\u6CC1\u8A86\u8A91\u913A\u58D9\u7E8A\u8CBA\u8667\u5DCB\u7ABA\u994B\u6F70\u5331\u8562\u6192\u8075\u7C23\u95AB\u9315\u9BE4\u64F4\u95CA\u8810\u881F\u81D8\u840A\u4F86\u8CF4\u5D0D\u5FA0\u6DF6\u7028\u8CDA\u775E\u9338\u7669\u7C5F\u85CD\u6B04\u6514\u7C43\u95CC\u862D\u703E\u8B95\u652C\u89BD\u61F6\u7E9C\u721B\u6FEB\u5D50\u6B16\u6595\u946D\u8964\u746F\u95AC\u92C3\u6488\u52DE\u6F87\u562E\u5D97\u92A0\u9412\u7646\u6A02\u9C33\u9433\u58D8\u985E\u6DDA\u8A84\u7E32\u7C6C\u8C8D\u96E2\u9BC9\u79AE\u9E97\u53B2\u52F5\u792B\u6B77\u701D\u96B8\u5137\u9148\u58E2\u85F6\u849E\u863A\u56A6\u9090\u9A6A\u7E2D\u6AEA\u6ADF\u8F62\u792A\u92F0\u9E1D\u7658\u7CF2\u8E92\u9742\u9C7A\u9C67\u5006\u806F\u84EE\u9023\u942E\u6190\u6F23\u7C3E\u6582\u81C9\u93C8\u6200\u7149\u7DF4\u861E\u5969\u7032\u7489\u6BAE\u8933\u895D\u9C31\u7CE7\u6DBC\u5169\u8F1B\u8AD2\u9B4E\u7642\u907C\u9410\u7E5A\u91D5\u9DEF\u7375\u81E8\u9130\u9C57\u51DC\u8CC3\u85FA\u5EE9\u6A81\u8F54\u8EAA\u9F61\u9234\u9748\u5DBA\u9818\u7DBE\u6B1E\u87F6\u9BEA\u993E\u5289\u700F\u9A2E\u7DB9\u93A6\u9DDA\u9F8D\u807E\u56A8\u7C60\u58DF\u650F\u96B4\u8622\u7027\u74CF\u6AF3\u6727\u7931\u6A13\u5A41\u645F\u7C0D\u50C2\u851E\u560D\u5D81\u93E4\u763A\u802C\u87BB\u9ACF\u8606\u76E7\u9871\u5EEC\u7210\u64C4\u9E75\u865C\u9B6F\u8CC2\u797F\u9304\u9678\u58DA\u64FC\u5695\u95AD\u7018\u6DE5\u6AE8\u6AD3\u8F64\u8F05\u8F46\u6C0C\u81DA\u9E15\u9DFA\u826B\u9C78\u5DD2\u6523\u5B7F\u7064\u4E82\u81E0\u5B4C\u6B12\u9E1E\u947E\u6384\u8F2A\u502B\u4F96\u6DEA\u7DB8\u8AD6\u5707\u863F\u7F85\u908F\u947C\u7C6E\u9A3E\u99F1\u7D61\u7296\u7380\u6FFC\u6B0F\u8161\u93CD\u9A62\u5442\u92C1\u4FB6\u5C62\u7E37\u616E\u6FFE\u7DA0\u6ADA\u8938\u92DD\u5638\u5ABD\u746A\u78BC\u879E\u99AC\u7F75\u55CE\u561C\u5B24\u69AA\u8CB7\u9EA5\u8CE3\u9081\u8108\u52F1\u779E\u9945\u883B\u6EFF\u8B3E\u7E35\u93DD\u9859\u9C3B\u8C93\u9328\u925A\u8CBF\u9EBC\u6C92\u9382\u9580\u60B6\u5011\u636B\u71DC\u61E3\u9346\u9333\u5922\u7787\u8B0E\u5F4C\u8993\u51AA\u7F8B\u8B10\u737C\u79B0\u7DBF\u7DEC\u6FA0\u9766\u9EFD\u5EDF\u7DF2\u7E46\u6EC5\u61AB\u95A9\u9594\u7DE1\u9CF4\u9298\u8B2C\u8B28\u9A40\u9943\u6B7F\u93CC\u8B00\u755D\u926C\u5436\u9209\u7D0D\u96E3\u6493\u8166\u60F1\u9B27\u9403\u8A25\u9912\u5167\u64EC\u81A9\u922E\u9BE2\u6506\u8F26\u9BF0\u91C0\u9CE5\u8526\u88CA\u8076\u5699\u9477\u93B3\u9689\u8617\u56C1\u9862\u8EA1\u6AB8\u7370\u5BE7\u64F0\u6FD8\u82E7\u5680\u8079\u9215\u7D10\u81BF\u6FC3\u8FB2\u5102\u5665\u99D1\u91F9\u8AFE\u513A\u7627\u6B50\u9DD7\u6BC6\u5614\u6F1A\u8B33\u616A\u750C\u76E4\u8E63\u9F90\u62CB\u76B0\u8CE0\u8F61\u5674\u9D6C\u7D15\u7F86\u9239\u9A19\u8ADE\u99E2\u98C4\u7E39\u983B\u8CA7\u5B2A\u860B\u6191\u8A55\u6F51\u9817\u91D9\u64B2\u92EA\u6A38\u8B5C\u93F7\u9420\u68F2\u81CD\u9F4A\u9A0E\u8C48\u555F\u6C23\u68C4\u8A16\u8604\u9A0F\u7DBA\u69BF\u78E7\u980E\u980F\u9C2D\u727D\u91EC\u925B\u9077\u7C3D\u8B19\u9322\u9257\u6F5B\u6DFA\u8B74\u5879\u50C9\u8541\u6173\u9A2B\u7E7E\u69E7\u9210\u69CD\u55C6\u58BB\u8594\u5F37\u6436\u5B19\u6AA3\u6227\u7197\u9306\u93D8\u93F9\u7FA5\u8E4C\u936C\u6A4B\u55AC\u50D1\u7FF9\u7AC5\u8A9A\u8B59\u854E\u7E70\u78FD\u8E7A\u7ACA\u611C\u9365\u7BCB\u6B3D\u89AA\u5BE2\u92DF\u8F15\u6C2B\u50BE\u9803\u8ACB\u6176\u64B3\u9BD6\u74CA\u7AAE\u7162\u86FA\u5DF0\u8CD5\u87E3\u9C0D\u8DA8\u5340\u8EC0\u9A45\u9F72\u8A58\u5D87\u95C3\u89B7\u9D1D\u9874\u6B0A\u52F8\u8A6E\u7DA3\u8F07\u9293\u537B\u9D72\u78BA\u95CB\u95D5\u6128\u8B93\u9952\u64FE\u7E5E\u8558\u5B08\u6A48\u71B1\u97CC\u8A8D\u7D09\u98EA\u8ED4\u69AE\u7D68\u5DB8\u8811\u7E1F\u92A3\u9870\u8EDF\u92B3\u8706\u958F\u6F64\u7051\u85A9\u98AF\u9C13\u8CFD\u5098\u6BFF\u7CDD\u55AA\u9A37\u6383\u7E45\u6F80\u55C7\u92AB\u7A61\u6BBA\u524E\u7D17\u93A9\u9BCA\u7BE9\u66EC\u91C3\u522A\u9583\u965C\u8D0D\u7E55\u8A15\u59CD\u9A38\u91E4\u9C54\u5891\u50B7\u8CDE\u5770\u6BA4\u89F4\u71D2\u7D39\u8CD2\u651D\u61FE\u8A2D\u5399\u7044\u756C\u7D33\u5BE9\u5B38\u814E\u6EF2\u8A75\u8AD7\u700B\u8072\u7E69\u52DD\u5E2B\u7345\u6FD5\u8A69\u6642\u8755\u5BE6\u8B58\u99DB\u52E2\u9069\u91CB\u98FE\u8996\u8A66\u8B1A\u5852\u8494\u5F12\u8EFE\u8CB0\u9230\u9C23\u58FD\u7378\u7DAC\u6A1E\u8F38\u66F8\u8D16\u5C6C\u8853\u6A39\u8C4E\u6578\u6504\u7D13\u5E25\u9582\u96D9\u8AB0\u7A05\u9806\u8AAA\u78A9\u720D\u9460\u7D72\u98FC\u5EDD\u99DF\u7DE6\u9376\u9DE5\u8073\u616B\u980C\u8A1F\u8AA6\u64FB\u85EA\u993F\u98BC\u93AA\u8607\u8A34\u8085\u8B16\u7A4C\u96D6\u96A8\u7D8F\u6B72\u8AB6\u5B6B\u640D\u7B4D\u84C0\u733B\u7E2E\u7463\u9396\u55E9\u8127\u737A\u64BB\u95E5\u9248\u9C28\u81FA\u614B\u9226\u9B90\u6524\u8CAA\u7671\u7058\u58C7\u8B5A\u8AC7\u5606\u66C7\u926D\u931F\u9807\u6E6F\u71D9\u513B\u9933\u940B\u93DC\u6FE4\u7D73\u8A0E\u97DC\u92F1\u9A30\u8B04\u92BB\u984C\u9AD4\u5C5C\u7DF9\u9D5C\u95D0\u689D\u7CF6\u9F60\u9C37\u8CBC\u9435\u5EF3\u807D\u70F4\u9285\u7D71\u615F\u982D\u9204\u79BF\u5716\u91F7\u5718\u6476\u9839\u86FB\u98E9\u812B\u9D15\u99B1\u99DD\u6A62\u7C5C\u9F09\u896A\u5AA7\u8183\u5F4E\u7063\u9811\u842C\u7D08\u7DB0\u7DB2\u8F1E\u97CB\u9055\u570D\u70BA\u6FF0\u7DAD\u8466\u5049\u507D\u7DEF\u8B02\u885B\u8AC9\u5E43\u95C8\u6E88\u6F7F\u744B\u97D9\u7152\u9BAA\u6EAB\u805E\u7D0B\u7A69\u554F\u95BF\u7515\u64BE\u8778\u6E26\u7AA9\u81E5\u8435\u9F77\u55DA\u93A2\u70CF\u8AA3\u7121\u856A\u5433\u5862\u9727\u52D9\u8AA4\u9114\u5EE1\u61AE\u5AF5\u9A16\u9D61\u9DA9\u932B\u72A7\u8972\u7FD2\u9291\u6232\u7D30\u993C\u9B29\u74BD\u89A1\u8766\u8F44\u5CFD\u4FE0\u72F9\u5EC8\u5687\u7864\u9BAE\u7E96\u8CE2\u929C\u9591\u986F\u96AA\u73FE\u737B\u7E23\u9921\u7FA8\u61B2\u7DDA\u83A7\u859F\u861A\u5CF4\u736B\u5AFB\u9DF4\u7647\u8814\u79C8\u8E9A\u5EC2\u9472\u9109\u8A73\u97FF\u9805\u858C\u9909\u9A64\u7DD7\u9957\u856D\u56C2\u92B7\u66C9\u562F\u5635\u701F\u9A4D\u7D83\u689F\u7C2B\u5354\u633E\u651C\u8105\u8AE7\u5BEB\u7009\u8B1D\u893B\u64F7\u7D32\u7E88\u92C5\u91C1\u8208\u9658\u6ECE\u5147\u6D36\u92B9\u7E61\u9948\u9D42\u865B\u5653\u9808\u8A31\u6558\u7DD2\u7E8C\u8A61\u980A\u8ED2\u61F8\u9078\u766C\u7D62\u8AFC\u9249\u93C7\u5B78\u8B14\u6FA9\u9C48\u52DB\u8A62\u5C0B\u99B4\u8A13\u8A0A\u905C\u5864\u6F6F\u9C58\u58D3\u9D09\u9D28\u555E\u4E9E\u8A1D\u57E1\u5A6D\u690F\u6C2C\u95B9\u7159\u9E7D\u56B4\u5DD6\u984F\u95BB\u8277\u53AD\u786F\u5F65\u8AFA\u9A57\u53B4\u8D17\u513C\u5157\u8B9E\u61E8\u9586\u91C5\u9B58\u995C\u9F34\u9D26\u694A\u63DA\u760D\u967D\u7662\u990A\u6A23\u716C\u7464\u6416\u582F\u9059\u7AAF\u8B20\u85E5\u8EFA\u9DC2\u9C29\u723A\u9801\u696D\u8449\u9768\u8B01\u9134\u66C4\u71C1\u91AB\u92A5\u9824\u907A\u5100\u87FB\u85DD\u5104\u61B6\u7FA9\u8A63\u8B70\u8ABC\u8B6F\u7570\u7E79\u8A52\u56C8\u5DA7\u98F4\u61CC\u9A5B\u7E0A\u8EFC\u8CBD\u91D4\u93B0\u943F\u761E\u8264\u852D\u9670\u9280\u98F2\u96B1\u92A6\u766E\u6AFB\u5B30\u9DF9\u61C9\u7E93\u7469\u87A2\u71DF\u7192\u8805\u8D0F\u7A4E\u584B\u9DAF\u7E08\u93A3\u6516\u56B6\u7005\u7020\u74D4\u9E1A\u766D\u9826\u7F4C\u55B2\u64C1\u50AD\u7670\u8E34\u8A60\u93DE\u512A\u6182\u90F5\u923E\u7336\u8A98\u8555\u92AA\u9B77\u8F3F\u9B5A\u6F01\u5A1B\u8207\u5DBC\u8A9E\u7344\u8B7D\u9810\u99AD\u50B4\u4FC1\u8ADB\u8AED\u8577\u5D33\u98EB\u95BE\u5AD7\u7D06\u89A6\u6B5F\u923A\u9D52\u9DF8\u9F6C\u9D1B\u6DF5\u8F45\u5712\u54E1\u5713\u7DE3\u9060\u6ADE\u9CF6\u9EFF\u7D04\u8E8D\u9470\u7CB5\u6085\u95B1\u925E\u9116\u52FB\u9695\u904B\u860A\u919E\u6688\u97FB\u9106\u8553\u60F2\u614D\u7D1C\u97DE\u6B9E\u6C33\u96DC\u707D\u8F09\u6522\u66AB\u8D0A\u74DA\u8DB2\u93E8\u8D13\u81DF\u99D4\u947F\u68D7\u8CAC\u64C7\u5247\u6FA4\u8CFE\u5616\u5E58\u7C00\u8CCA\u8B56\u8D08\u7D9C\u7E52\u8ECB\u9358\u9598\u67F5\u8A50\u9F4B\u50B5\u6C08\u76DE\u65AC\u8F3E\u5D84\u68E7\u6230\u7DBB\u8B6B\u5F35\u6F32\u5E33\u8CEC\u8139\u8D99\u8A54\u91D7\u87C4\u8F4D\u937A\u9019\u8B2B\u8F12\u9DD3\u8C9E\u91DD\u5075\u8A3A\u93AE\u9663\u6E5E\u7E1D\u6968\u8EEB\u8CD1\u798E\u9D06\u6399\u775C\u7319\u722D\u5E40\u7665\u912D\u8B49\u8ACD\u5D22\u9266\u931A\u7B8F\u7E54\u8077\u57F7\u7D19\u646F\u64F2\u5E5F\u8CEA\u6EEF\u9A2D\u6ADB\u6894\u8EF9\u8F0A\u8D04\u9DD9\u8784\u7E36\u8E93\u8E91\u89F6\u9418\u7D42\u7A2E\u816B\u773E\u937E\u8B05\u8EF8\u76BA\u665D\u9A5F\u7D02\u7E10\u8C6C\u8AF8\u8A85\u71ED\u77DA\u56D1\u8CAF\u9444\u99D0\u4F47\u6AE7\u9296\u5C08\u78DA\u8F49\u8CFA\u56C0\u994C\u9873\u6A01\u838A\u88DD\u599D\u58EF\u72C0\u9310\u8D05\u589C\u7DB4\u9A05\u7E0B\u8AC4\u6E96\u8457\u6FC1\u8AD1\u9432\u8332\u8CC7\u6F2C\u8AEE\u7DC7\u8F1C\u8CB2\u7725\u9319\u9F5C\u9BD4\u8E64\u7E3D\u7E31\u50AF\u9112\u8ACF\u9A36\u9BEB\u8A5B\u7D44\u93C3\u9246\u7E98\u8EA6\u9C52\u7FFA\u4E26\u8514\u6C88\u919C\u6FB1\u53E0\u9B25\u7BC4\u5E79\u81EF\u77FD\u6AC3\u5F8C\u5925\u7A2D\u5091\u8A23\u8A87\u88E1\u88CF\u6DE9\u9EBD\u9EF4\u649A\u6DD2\u6261\u8056\u5C4D\u64E1\u5857\u7AAA\u9935\u6C59\u9341\u9E79\u880D\u5F5C\u6E67\u904A\u7C72\u79A6\u9858\u5DBD\u96F2\u7AC8\u7D2E\u5284\u7BC9\u65BC\u8A8C\u8A3B\u96D5\u8A01\u8B7E\u90E4\u731B\u6C39\u962A\u58DF\u5816\u57B5\u588A\u6ABE\u8552\u8464\u84E7\u8493\u83C7\u69C1\u6463\u54A4\u551A\u54E2\u565D\u5645\u6485\u5288\u8B14\u8946\u5DB4\u810A\u4EFF\u50E5\u7341\u9E85\u9918\u9937\u994A\u9962\u695E\u6035\u61CD\u723F\u6F35\u7069\u6DF7\u6FEB\u7026\u6DE1\u5BE7\u7CF8\u7D5D\u7DD4\u7449\u6898\u68EC\u6848\u6A70\u6AEB\u8EF2\u8EE4\u8CEB\u8181\u8156\u98C8\u7CCA\u7146\u6E9C\u6E63\u6E3A\u78B8\u6EFE\u7798\u9208\u9255\u92E3\u92B1\u92E5\u92F6\u9426\u9427\u9369\u9340\u9343\u9307\u9384\u9387\u93BF\u941D\u9465\u9479\u9454\u7A6D\u9D93\u9DA5\u9E0C\u7667\u5C59\u7602\u81D2\u8947\u7E48\u802E\u986C\u87CE\u9EAF\u9B81\u9B83\u9B8E\u9BD7\u9BDD\u9BF4\u9C5D\u9BFF\u9C20\u9C35\u9C45\u97BD\u97DD\u9F47\u4E2C\u7232\u56B2\u8846\u50DE\u9918\u51A2\u6DE8\u51CC\u51FC\u5257\u52F3\u52D0\u52E9\u6EF7\u9749\u9746\u5553\u5494\u5412\u54B4\u54CC\u8B41\u55CA\u5562\u5523\u553F\u9F67\u56C9\u563D\u5475\u567C\u56AF\u58E0\u57A7\u58B6\u58CB\u58CE\u57DD\u58EA\u7246\u58FC\u5B00\u59DC\u5AFA\u5AFF\u5C53\u5D2C\u5DA8\u5DA2\u5DAE\u5D94\u5D5B\u5D74\u5ECE\u5F60\u5FA1\u610D\u6196\u61B7\u624E\u6266\u6397\u648F\u637B\u63F8\u6698\u66E8\u672D\u684A\u6AAE\u68F6\u6AFA\u6A9F\u6A90\u6C61\u6C93\u6E22\u6F59\u6CB5\u6EAE\u6EFB\u6FDC\u6D8C\u6EB3\u6EBC\u6F0A\u6FA6\u6F24\u7145\u7173\u7198\u729B\u729F\u72CD\u736E\u875F\u74B5\u7452\u7472\u73C9\u73CF\u74AB\u74A1\u7487\u7572\u75FE\u762E\u763B\u766F\u77D3\u7740\u785C\u7845\u78D1\u7904\u7906\u78B9\u78D9\u7995\u7A60\u7C39\u7C64\u7C59\u9931\u7CF9\u7D18\u7D1D\u7D35\u7D16\u7D70\u7D8C\u7D5B\u7DD3\u979D\u7DAF\u7E15\u7DDA\u7E17\u7E6E\u7FFD\u7FEC\u80B7\u9AD2\u9183\u8195\u9F76\u81E2\u8C54\u8279\u8598\u839C\u84F4\u8600\u85C1\u866F\u87BF\u8828\u5ACB\u8918\u894F\u890C\u8949\u8941\u8974\u898E\u89A5\u8B8B\u8A12\u8A29\u8A57\u8A56\u8B78\u8ADD\u8AE1\u8C37\u8C76\u8C9F\u9F4E\u8D14\u8CD9\u8CF5\u8D07\u8D6C\u8DD6\u8E82\u8E0A\u8ED1\u8F08\u8F2C\u8F40\u9B31\u90C4\u91B1\u9245\u9451\u91FA\u9212\u935A\u9203\u9262\u947D\u9276\u928D\u929B\u92D9\u93FD\u9417\u9321\u9329\u6774\u9348\u9360\u93A1\u939B\u9394\u93F0\u93D0\u9481\u9436\u945E\u9588\u9592\u95D3\u95CD\u95E0\u95D2\u95E4\u965D\u97B4\u97CD\u9832\u71B2\u982E\u9834\u9852\u7E87\u98BA\u98AD\u98B8\u98BB\u98C0\u98E3\u98E2\u98E5\u98FF\u9904\u990E\u990F\u9916\u9915\u991C\u9936\u9941\u993A\u99B9\u99F0\u9A6B\u9A02\u99F8\u9A0C\u9A4C\u9A24\u9A66\u9B5B\u9B62\u9B68\u9B7A\u9B8B\u9B93\u9B8A\u9B8D\u9BB3\u9BA6\u9C02\u9B9C\u9C60\u9BBA\u9BB6\u9BD2\u9BD5\u9C3A\u9C0F\u9C68\u9BF7\u9C2E\u9C03\u9C01\u9C42\u9C1F\u9C1C\u9C3C\u9C6F\u9C64\u9C63\u9CF2\u9DAC\u9D1E\u9D12\u9DFD\u9D34\u9D43\u9D50\u9DF3\u9D7E\u9D6E\u9D8A\u9D77\u9DEB\u9DA1\u9DCA\u9DB2\u9DB9\u9DBA\u9DC1\u9DD6\u9E07\u9E0F\u9E18\u9EF6\u9F02\u9780\u9F55\u9F57\u5FD7\u5236\u8AEE\u53EA\u7CFB\u9B06\u5690\u9762\u4E7E\u62FC\u5641\u8B9A\u9AEE\u6BAD\u7DFB\u59E6\u7A6B\u934A\u8FF4\u4FC2\u8E5F\u96BB\u95E2\u95C6\u59B3";
+}
+var exceptionMap = /* @__PURE__ */ new Map([
+  ["\u5403", "\u5403"],
+  // 吃 -> 喫，但同源，不转换
+  ["\u6CE8", "\u6CE8"]
+  // 注 -> 註，但同源，不转换
+]);
+function traditionalized(cc) {
+  let str = "";
+  for (let i = 0; i < cc.length; i++) {
+    const char = cc.charAt(i);
+    if (exceptionMap.has(char)) {
+      str += char;
+      continue;
+    }
+    const index = charPYStr().indexOf(char);
+    if (index !== -1) {
+      str += ftPYStr().charAt(index);
+    } else {
+      str += char;
+    }
+  }
+  return str;
+}
+function simplized(cc) {
+  let str = "";
+  for (let i = 0; i < cc.length; i++) {
+    if (ftPYStr().indexOf(cc.charAt(i)) != -1)
+      str += charPYStr().charAt(ftPYStr().indexOf(cc.charAt(i)));
+    else
+      str += cc.charAt(i);
+  }
+  return str;
+}
+function isNonChinese(str) {
+  const chineseRegex = /[\u4e00-\u9fff]/;
+  return !chineseRegex.test(str);
 }
 
 // danmu_api/utils/codec-util.js
@@ -1943,9 +2077,9 @@ function addRoundKey(state, w) {
   return out;
 }
 function invSubBytes(state) {
-  const INV_SBOX = new Array(256);
-  for (let i = 0; i < 256; i++) INV_SBOX[SBOX[i]] = i;
-  return Uint8Array.from(state.map((b) => INV_SBOX[b]));
+  const INV_SBOX2 = new Array(256);
+  for (let i = 0; i < 256; i++) INV_SBOX2[SBOX[i]] = i;
+  return Uint8Array.from(state.map((b) => INV_SBOX2[b]));
 }
 function invShiftRows(state) {
   const out = new Uint8Array(16);
@@ -2276,10 +2410,6 @@ function createHmacSha256(key, message) {
   const hmacBytes = sha256(String.fromCharCode(...oKeyPad) + String.fromCharCode(...innerHash));
   return bytesToBase64(hmacBytes);
 }
-function generateRandomSid() {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-}
 function generateSign(path2, timestamp, params, secretKey) {
   let signStr = path2 + "t" + timestamp;
   if (params) {
@@ -2290,16 +2420,6 @@ function generateSign(path2, timestamp, params, secretKey) {
   }
   signStr += secretKey;
   return md5(signStr);
-}
-function generateXCaSign(path2, timestamp, queryString, secretKey) {
-  let signStr = `GET
-*/*
-gzip
-
-x-ca-method:1
-${path2}`;
-  if (queryString) signStr += `?${queryString}`;
-  return createHmacSha256(secretKey, signStr);
 }
 function fromCodePoint(codePoint) {
   if (codePoint <= 65535) {
@@ -2383,7 +2503,9 @@ async function updateRedisCaches() {
       { key: "animes", value: globals.animes },
       { key: "episodeIds", value: globals.episodeIds },
       { key: "episodeNum", value: globals.episodeNum },
-      { key: "lastSelectMap", value: globals.lastSelectMap }
+      { key: "reqRecords", value: globals.reqRecords },
+      { key: "lastSelectMap", value: globals.lastSelectMap },
+      { key: "todayReqNum", value: globals.todayReqNum }
     ];
     for (const { key, value } of variables) {
       const serializedValue = key === "lastSelectMap" ? JSON.stringify(Object.fromEntries(value)) : JSON.stringify(value);
@@ -2424,6 +2546,9 @@ async function updateRedisCaches() {
     log("error", `Error details - Name: ${error.name}, Cause: ${error.cause ? error.cause.message : "N/A"}`);
   }
 }
+
+// danmu_api/apis/dandan-api.js
+
 
 // danmu_api/utils/common-util.js
 function printFirst200Chars(data) {
@@ -2522,13 +2647,14 @@ function strictTitleMatch(title, query) {
   return false;
 }
 function titleMatches(title, query) {
-  if (globals.strictTitleMatch) {
-    return strictTitleMatch(title, query);
-  } else {
-    const normalizedTitle = normalizeSpaces(title);
-    const normalizedQuery = normalizeSpaces(query);
-    return normalizedTitle.includes(normalizedQuery);
-  }
+  if (globals.strictTitleMatch) return strictTitleMatch(title, query);
+  const t = normalizeSpaces(title).toLowerCase();
+  const q = normalizeSpaces(query).toLowerCase();
+  if (t.includes(q)) return true;
+  const qSet = new Set(q);
+  const tSet = new Set(t);
+  const matchCount = [...qSet].reduce((acc, char) => acc + (tSet.has(char) ? 1 : 0), 0);
+  return matchCount / qSet.size > 0.8;
 }
 function validateType(value, expectedType) {
   const fieldName = value?.constructor?.name;
@@ -2927,7 +3053,12 @@ function addAnime(anime) {
       }
     }
     log("info", `animes: ${JSON.stringify(
-      globals.animes,
+      globals.animes.map((anime2) => ({
+        links: anime2.links,
+        animeId: anime2.animeId,
+        bangumiId: anime2.bangumiId,
+        animeTitle: anime2.animeTitle
+      })),
       (key, value) => key === "links" ? value.length : value
     )}`);
     return true;
@@ -3012,7 +3143,9 @@ async function updateLocalCaches() {
       { key: "animes", value: globals.animes },
       { key: "episodeIds", value: globals.episodeIds },
       { key: "episodeNum", value: globals.episodeNum },
-      { key: "lastSelectMap", value: globals.lastSelectMap }
+      { key: "reqRecords", value: globals.reqRecords },
+      { key: "lastSelectMap", value: globals.lastSelectMap },
+      { key: "todayReqNum", value: globals.todayReqNum }
     ];
     for (const { key, value } of variables) {
       const serializedValue = key === "lastSelectMap" ? JSON.stringify(Object.fromEntries(value)) : JSON.stringify(value);
@@ -3034,38 +3167,6 @@ async function updateLocalCaches() {
     log("error", `updateLocalCaches failed: ${error.message}`, error.stack);
     log("error", `Error details - Name: ${error.name}, Cause: ${error.cause ? error.cause.message : "N/A"}`);
   }
-}
-
-// danmu_api/utils/zh-util.js
-function charPYStr() {
-  return "\u9515\u7691\u853C\u788D\u7231\u55F3\u5AD2\u7477\u66A7\u972D\u8C19\u94F5\u9E4C\u80AE\u8884\u5965\u5AAA\u9A9C\u9CCC\u575D\u7F62\u94AF\u6446\u8D25\u5457\u9881\u529E\u7ECA\u94A3\u5E2E\u7ED1\u9551\u8C24\u5265\u9971\u5B9D\u62A5\u9C8D\u9E28\u9F85\u8F88\u8D1D\u94A1\u72C8\u5907\u60EB\u9E4E\u8D32\u951B\u7EF7\u7B14\u6BD5\u6BD9\u5E01\u95ED\u835C\u54D4\u6ED7\u94CB\u7B5A\u8DF8\u8FB9\u7F16\u8D2C\u53D8\u8FA9\u8FAB\u82C4\u7F0F\u7B3E\u6807\u9AA0\u98D1\u98D9\u9556\u9573\u9CD4\u9CD6\u522B\u762A\u6FD2\u6EE8\u5BBE\u6448\u50A7\u7F24\u69DF\u6BA1\u8191\u9554\u9ACC\u9B13\u997C\u7980\u62E8\u94B5\u94C2\u9A73\u997D\u94B9\u9E41\u8865\u94B8\u8D22\u53C2\u8695\u6B8B\u60ED\u60E8\u707F\u9A96\u9EEA\u82CD\u8231\u4ED3\u6CA7\u5395\u4FA7\u518C\u6D4B\u607B\u5C42\u8BE7\u9538\u4FAA\u9497\u6400\u63BA\u8749\u998B\u8C17\u7F20\u94F2\u4EA7\u9610\u98A4\u5181\u8C04\u8C36\u8487\u5FCF\u5A75\u9AA3\u89C7\u7985\u9561\u573A\u5C1D\u957F\u507F\u80A0\u5382\u7545\u4F25\u82CC\u6005\u960A\u9CB3\u949E\u8F66\u5F7B\u7817\u5C18\u9648\u886C\u4F27\u8C0C\u6987\u789C\u9F80\u6491\u79F0\u60E9\u8BDA\u9A8B\u67A8\u67FD\u94D6\u94DB\u75F4\u8FDF\u9A70\u803B\u9F7F\u70BD\u996C\u9E31\u51B2\u51B2\u866B\u5BA0\u94F3\u7574\u8E0C\u7B79\u7EF8\u4FE6\u5E31\u96E0\u6A71\u53A8\u9504\u96CF\u7840\u50A8\u89E6\u5904\u520D\u7ECC\u8E70\u4F20\u948F\u75AE\u95EF\u521B\u6006\u9524\u7F0D\u7EAF\u9E51\u7EF0\u8F8D\u9F8A\u8F9E\u8BCD\u8D50\u9E5A\u806A\u8471\u56F1\u4ECE\u4E1B\u82C1\u9AA2\u679E\u51D1\u8F8F\u8E7F\u7A9C\u64BA\u9519\u9509\u9E7E\u8FBE\u54D2\u9791\u5E26\u8D37\u9A80\u7ED0\u62C5\u5355\u90F8\u63B8\u80C6\u60EE\u8BDE\u5F39\u6B9A\u8D55\u7605\u7BAA\u5F53\u6321\u515A\u8361\u6863\u8C20\u7800\u88C6\u6363\u5C9B\u7977\u5BFC\u76D7\u7118\u706F\u9093\u956B\u654C\u6DA4\u9012\u7F14\u7C74\u8BCB\u8C1B\u7EE8\u89CC\u955D\u98A0\u70B9\u57AB\u7535\u5DC5\u94BF\u766B\u9493\u8C03\u94EB\u9CB7\u8C0D\u53E0\u9CBD\u9489\u9876\u952D\u8BA2\u94E4\u4E22\u94E5\u4E1C\u52A8\u680B\u51BB\u5CBD\u9E2B\u7AA6\u728A\u72EC\u8BFB\u8D4C\u9540\u6E0E\u691F\u724D\u7B03\u9EE9\u953B\u65AD\u7F0E\u7C16\u5151\u961F\u5BF9\u603C\u9566\u5428\u987F\u949D\u7096\u8DB8\u593A\u5815\u94CE\u9E45\u989D\u8BB9\u6076\u997F\u8C14\u57A9\u960F\u8F6D\u9507\u9537\u9E57\u989A\u989B\u9CC4\u8BF6\u513F\u5C14\u9975\u8D30\u8FE9\u94D2\u9E38\u9C95\u53D1\u7F5A\u9600\u73D0\u77FE\u9492\u70E6\u8D29\u996D\u8BBF\u7EBA\u94AB\u9C82\u98DE\u8BFD\u5E9F\u8D39\u7EEF\u9544\u9CB1\u7EB7\u575F\u594B\u6124\u7CAA\u507E\u4E30\u67AB\u950B\u98CE\u75AF\u51AF\u7F1D\u8BBD\u51E4\u6CA3\u80A4\u8F90\u629A\u8F85\u8D4B\u590D\u8D1F\u8BA3\u5987\u7F1A\u51EB\u9A78\u7EC2\u7ECB\u8D59\u9EB8\u9C8B\u9CC6\u9486\u8BE5\u9499\u76D6\u8D45\u6746\u8D76\u79C6\u8D63\u5C34\u64C0\u7EC0\u5188\u521A\u94A2\u7EB2\u5C97\u6206\u9550\u777E\u8BF0\u7F1F\u9506\u6401\u9E3D\u9601\u94EC\u4E2A\u7EA5\u9549\u988D\u7ED9\u4E98\u8D53\u7EE0\u9CA0\u9F9A\u5BAB\u5DE9\u8D21\u94A9\u6C9F\u82DF\u6784\u8D2D\u591F\u8BDF\u7F11\u89CF\u86CA\u987E\u8BC2\u6BC2\u94B4\u9522\u9E2A\u9E44\u9E58\u5250\u6302\u9E39\u63B4\u5173\u89C2\u9986\u60EF\u8D2F\u8BD6\u63BC\u9E73\u9CCF\u5E7F\u72B7\u89C4\u5F52\u9F9F\u95FA\u8F68\u8BE1\u8D35\u523D\u5326\u523F\u59AB\u6867\u9C91\u9CDC\u8F8A\u6EDA\u886E\u7EF2\u9CA7\u9505\u56FD\u8FC7\u57DA\u5459\u5E3C\u6901\u8748\u94EA\u9A87\u97E9\u6C49\u961A\u7ED7\u9889\u53F7\u704F\u98A2\u9602\u9E64\u8D3A\u8BC3\u9616\u86CE\u6A2A\u8F70\u9E3F\u7EA2\u9EC9\u8BA7\u836D\u95F3\u9C8E\u58F6\u62A4\u6CAA\u6237\u6D52\u9E55\u54D7\u534E\u753B\u5212\u8BDD\u9A85\u6866\u94E7\u6000\u574F\u6B22\u73AF\u8FD8\u7F13\u6362\u5524\u75EA\u7115\u6DA3\u5942\u7F33\u953E\u9CA9\u9EC4\u8C0E\u9CC7\u6325\u8F89\u6BC1\u8D3F\u79FD\u4F1A\u70E9\u6C47\u8BB3\u8BF2\u7ED8\u8BD9\u835F\u54D5\u6D4D\u7F0B\u73F2\u6656\u8364\u6D51\u8BE8\u9984\u960D\u83B7\u8D27\u7978\u94AC\u956C\u51FB\u673A\u79EF\u9965\u8FF9\u8BA5\u9E21\u7EE9\u7F09\u6781\u8F91\u7EA7\u6324\u51E0\u84DF\u5242\u6D4E\u8BA1\u8BB0\u9645\u7EE7\u7EAA\u8BA6\u8BD8\u8360\u53FD\u54DC\u9AA5\u7391\u89CA\u9F51\u77F6\u7F81\u867F\u8DFB\u9701\u9C9A\u9CAB\u5939\u835A\u988A\u8D3E\u94BE\u4EF7\u9A7E\u90CF\u6D43\u94D7\u9553\u86F2\u6B7C\u76D1\u575A\u7B3A\u95F4\u8270\u7F04\u8327\u68C0\u78B1\u7877\u62E3\u6361\u7B80\u4FED\u51CF\u8350\u69DB\u9274\u8DF5\u8D31\u89C1\u952E\u8230\u5251\u996F\u6E10\u6E85\u6DA7\u8C0F\u7F23\u620B\u622C\u7751\u9E63\u7B15\u9CA3\u97AF\u5C06\u6D46\u848B\u6868\u5956\u8BB2\u9171\u7EDB\u7F30\u80F6\u6D47\u9A84\u5A07\u6405\u94F0\u77EB\u4FA5\u811A\u997A\u7F34\u7EDE\u8F7F\u8F83\u6322\u5CE4\u9E6A\u9C9B\u9636\u8282\u6D01\u7ED3\u8BEB\u5C4A\u7596\u988C\u9C92\u7D27\u9526\u4EC5\u8C28\u8FDB\u664B\u70EC\u5C3D\u52B2\u8346\u830E\u537A\u8369\u9991\u7F19\u8D46\u89D0\u9CB8\u60CA\u7ECF\u9888\u9759\u955C\u5F84\u75C9\u7ADE\u51C0\u522D\u6CFE\u8FF3\u5F2A\u80EB\u9753\u7EA0\u53A9\u65E7\u9604\u9E20\u9E6B\u9A79\u4E3E\u636E\u952F\u60E7\u5267\u8BB5\u5C66\u6989\u98D3\u949C\u9514\u7AAD\u9F83\u9E43\u7EE2\u9529\u954C\u96BD\u89C9\u51B3\u7EDD\u8C32\u73CF\u94A7\u519B\u9A8F\u76B2\u5F00\u51EF\u5240\u57B2\u5FFE\u607A\u94E0\u9534\u9F9B\u95F6\u94AA\u94D0\u9897\u58F3\u8BFE\u9A92\u7F02\u8F72\u94B6\u951E\u9894\u57A6\u6073\u9F88\u94FF\u62A0\u5E93\u88E4\u55BE\u5757\u4FA9\u90D0\u54D9\u810D\u5BBD\u72EF\u9ACB\u77FF\u65F7\u51B5\u8BD3\u8BF3\u909D\u5739\u7EA9\u8D36\u4E8F\u5CBF\u7AA5\u9988\u6E83\u532E\u8489\u6126\u8069\u7BD1\u9603\u951F\u9CB2\u6269\u9614\u86F4\u8721\u814A\u83B1\u6765\u8D56\u5D03\u5F95\u6D9E\u6FD1\u8D49\u7750\u94FC\u765E\u7C41\u84DD\u680F\u62E6\u7BEE\u9611\u5170\u6F9C\u8C30\u63FD\u89C8\u61D2\u7F06\u70C2\u6EE5\u5C9A\u6984\u6593\u9567\u8934\u7405\u9606\u9512\u635E\u52B3\u6D9D\u5520\u5D02\u94D1\u94F9\u75E8\u4E50\u9CD3\u956D\u5792\u7C7B\u6CEA\u8BD4\u7F27\u7BF1\u72F8\u79BB\u9CA4\u793C\u4E3D\u5389\u52B1\u783E\u5386\u6CA5\u96B6\u4FEA\u90E6\u575C\u82C8\u8385\u84E0\u5456\u9026\u9A8A\u7F21\u67A5\u680E\u8F79\u783A\u9502\u9E42\u75A0\u7C9D\u8DDE\u96F3\u9CA1\u9CE2\u4FE9\u8054\u83B2\u8FDE\u9570\u601C\u6D9F\u5E18\u655B\u8138\u94FE\u604B\u70BC\u7EC3\u8539\u5941\u6F4B\u740F\u6B93\u88E2\u88E3\u9CA2\u7CAE\u51C9\u4E24\u8F86\u8C05\u9B49\u7597\u8FBD\u9563\u7F2D\u948C\u9E69\u730E\u4E34\u90BB\u9CDE\u51DB\u8D41\u853A\u5EEA\u6AA9\u8F9A\u8E8F\u9F84\u94C3\u7075\u5CAD\u9886\u7EEB\u68C2\u86CF\u9CAE\u998F\u5218\u6D4F\u9A9D\u7EFA\u954F\u9E68\u9F99\u804B\u5499\u7B3C\u5784\u62E2\u9647\u830F\u6CF7\u73D1\u680A\u80E7\u783B\u697C\u5A04\u6402\u7BD3\u507B\u848C\u55BD\u5D5D\u9542\u7618\u8027\u877C\u9AC5\u82A6\u5362\u9885\u5E90\u7089\u63B3\u5364\u864F\u9C81\u8D42\u7984\u5F55\u9646\u5786\u64B8\u565C\u95FE\u6CF8\u6E0C\u680C\u6A79\u8F73\u8F82\u8F98\u6C07\u80EA\u9E2C\u9E6D\u823B\u9C88\u5CE6\u631B\u5B6A\u6EE6\u4E71\u8114\u5A08\u683E\u9E3E\u92AE\u62A1\u8F6E\u4F26\u4ED1\u6CA6\u7EB6\u8BBA\u56F5\u841D\u7F57\u903B\u9523\u7BA9\u9AA1\u9A86\u7EDC\u8366\u7321\u6CFA\u6924\u8136\u9559\u9A74\u5415\u94DD\u4FA3\u5C61\u7F15\u8651\u6EE4\u7EFF\u6988\u891B\u950A\u5452\u5988\u739B\u7801\u8682\u9A6C\u9A82\u5417\u551B\u5B37\u6769\u4E70\u9EA6\u5356\u8FC8\u8109\u52A2\u7792\u9992\u86EE\u6EE1\u8C29\u7F26\u9558\u98A1\u9CD7\u732B\u951A\u94C6\u8D38\u4E48\u6CA1\u9541\u95E8\u95F7\u4EEC\u626A\u7116\u61D1\u9494\u9530\u68A6\u772F\u8C1C\u5F25\u89C5\u5E42\u8288\u8C27\u7315\u7962\u7EF5\u7F05\u6E11\u817C\u9EFE\u5E99\u7F08\u7F2A\u706D\u60AF\u95FD\u95F5\u7F17\u9E23\u94ED\u8C2C\u8C1F\u84E6\u998D\u6B81\u9546\u8C0B\u4EA9\u94BC\u5450\u94A0\u7EB3\u96BE\u6320\u8111\u607C\u95F9\u94D9\u8BB7\u9981\u5185\u62DF\u817B\u94CC\u9CB5\u64B5\u8F87\u9CB6\u917F\u9E1F\u8311\u8885\u8042\u556E\u954A\u954D\u9667\u8616\u55EB\u989F\u8E51\u67E0\u72DE\u5B81\u62E7\u6CDE\u82CE\u549B\u804D\u94AE\u7EBD\u8113\u6D53\u519C\u4FAC\u54DD\u9A7D\u9495\u8BFA\u50A9\u759F\u6B27\u9E25\u6BB4\u5455\u6CA4\u8BB4\u6004\u74EF\u76D8\u8E52\u5E9E\u629B\u75B1\u8D54\u8F94\u55B7\u9E4F\u7EB0\u7F74\u94CD\u9A97\u8C1D\u9A88\u98D8\u7F25\u9891\u8D2B\u5AD4\u82F9\u51ED\u8BC4\u6CFC\u9887\u948B\u6251\u94FA\u6734\u8C31\u9564\u9568\u6816\u8110\u9F50\u9A91\u5C82\u542F\u6C14\u5F03\u8BAB\u8572\u9A90\u7EEE\u6864\u789B\u9880\u9883\u9CCD\u7275\u948E\u94C5\u8FC1\u7B7E\u8C26\u94B1\u94B3\u6F5C\u6D45\u8C34\u5811\u4F65\u8368\u60AD\u9A9E\u7F31\u6920\u94A4\u67AA\u545B\u5899\u8537\u5F3A\u62A2\u5AF1\u6A2F\u6217\u709D\u9516\u9535\u956A\u7F9F\u8DC4\u9539\u6865\u4E54\u4FA8\u7FD8\u7A8D\u8BEE\u8C2F\u835E\u7F32\u7857\u8DF7\u7A83\u60EC\u9532\u7BA7\u94A6\u4EB2\u5BDD\u9513\u8F7B\u6C22\u503E\u9877\u8BF7\u5E86\u63FF\u9CAD\u743C\u7A77\u8315\u86F1\u5DEF\u8D47\u866E\u9CC5\u8D8B\u533A\u8EAF\u9A71\u9F8B\u8BCE\u5C96\u9612\u89D1\u9E32\u98A7\u6743\u529D\u8BE0\u7EFB\u8F81\u94E8\u5374\u9E4A\u786E\u9615\u9619\u60AB\u8BA9\u9976\u6270\u7ED5\u835B\u5A06\u6861\u70ED\u97E7\u8BA4\u7EAB\u996A\u8F6B\u8363\u7ED2\u5D58\u877E\u7F1B\u94F7\u98A6\u8F6F\u9510\u86AC\u95F0\u6DA6\u6D12\u8428\u98D2\u9CC3\u8D5B\u4F1E\u6BF5\u7CC1\u4E27\u9A9A\u626B\u7F2B\u6DA9\u556C\u94EF\u7A51\u6740\u5239\u7EB1\u94E9\u9CA8\u7B5B\u6652\u917E\u5220\u95EA\u9655\u8D61\u7F2E\u8BAA\u59D7\u9A9F\u9490\u9CDD\u5892\u4F24\u8D4F\u57A7\u6B87\u89DE\u70E7\u7ECD\u8D4A\u6444\u6151\u8BBE\u538D\u6EE0\u7572\u7EC5\u5BA1\u5A76\u80BE\u6E17\u8BDC\u8C02\u6E16\u58F0\u7EF3\u80DC\u5E08\u72EE\u6E7F\u8BD7\u65F6\u8680\u5B9E\u8BC6\u9A76\u52BF\u9002\u91CA\u9970\u89C6\u8BD5\u8C25\u57D8\u83B3\u5F11\u8F7C\u8D33\u94C8\u9CA5\u5BFF\u517D\u7EF6\u67A2\u8F93\u4E66\u8D4E\u5C5E\u672F\u6811\u7AD6\u6570\u6445\u7EBE\u5E05\u95E9\u53CC\u8C01\u7A0E\u987A\u8BF4\u7855\u70C1\u94C4\u4E1D\u9972\u53AE\u9A77\u7F0C\u9536\u9E36\u8038\u6002\u9882\u8BBC\u8BF5\u64DE\u85AE\u998A\u98D5\u953C\u82CF\u8BC9\u8083\u8C21\u7A23\u867D\u968F\u7EE5\u5C81\u8C07\u5B59\u635F\u7B0B\u836A\u72F2\u7F29\u7410\u9501\u5522\u7743\u736D\u631E\u95FC\u94CA\u9CCE\u53F0\u6001\u949B\u9C90\u644A\u8D2A\u762B\u6EE9\u575B\u8C2D\u8C08\u53F9\u6619\u94BD\u952C\u9878\u6C64\u70EB\u50A5\u9967\u94F4\u9557\u6D9B\u7EE6\u8BA8\u97EC\u94FD\u817E\u8A8A\u9511\u9898\u4F53\u5C49\u7F07\u9E48\u9617\u6761\u7C9C\u9F86\u9CA6\u8D34\u94C1\u5385\u542C\u70C3\u94DC\u7EDF\u6078\u5934\u94AD\u79C3\u56FE\u948D\u56E2\u629F\u9893\u8715\u9968\u8131\u9E35\u9A6E\u9A7C\u692D\u7BA8\u9F0D\u889C\u5A32\u817D\u5F2F\u6E7E\u987D\u4E07\u7EA8\u7EFE\u7F51\u8F8B\u97E6\u8FDD\u56F4\u4E3A\u6F4D\u7EF4\u82C7\u4F1F\u4F2A\u7EAC\u8C13\u536B\u8BFF\u5E0F\u95F1\u6CA9\u6DA0\u73AE\u97EA\u709C\u9C94\u6E29\u95FB\u7EB9\u7A33\u95EE\u960C\u74EE\u631D\u8717\u6DA1\u7A9D\u5367\u83B4\u9F8C\u545C\u94A8\u4E4C\u8BEC\u65E0\u829C\u5434\u575E\u96FE\u52A1\u8BEF\u90AC\u5E91\u6003\u59A9\u9A9B\u9E49\u9E5C\u9521\u727A\u88AD\u4E60\u94E3\u620F\u7EC6\u9969\u960B\u73BA\u89CB\u867E\u8F96\u5CE1\u4FA0\u72ED\u53A6\u5413\u7856\u9C9C\u7EA4\u8D24\u8854\u95F2\u663E\u9669\u73B0\u732E\u53BF\u9985\u7FA1\u5BAA\u7EBF\u82CB\u83B6\u85D3\u5C98\u7303\u5A34\u9E47\u75EB\u869D\u7C7C\u8DF9\u53A2\u9576\u4E61\u8BE6\u54CD\u9879\u8297\u9977\u9AA7\u7F03\u98E8\u8427\u56A3\u9500\u6653\u5578\u54D3\u6F47\u9A81\u7EE1\u67AD\u7BAB\u534F\u631F\u643A\u80C1\u8C10\u5199\u6CFB\u8C22\u4EB5\u64B7\u7EC1\u7F2C\u950C\u8845\u5174\u9649\u8365\u51F6\u6C79\u9508\u7EE3\u9990\u9E3A\u865A\u5618\u987B\u8BB8\u53D9\u7EEA\u7EED\u8BE9\u987C\u8F69\u60AC\u9009\u7663\u7EDA\u8C16\u94C9\u955F\u5B66\u8C11\u6CF6\u9CD5\u52CB\u8BE2\u5BFB\u9A6F\u8BAD\u8BAF\u900A\u57D9\u6D54\u9C9F\u538B\u9E26\u9E2D\u54D1\u4E9A\u8BB6\u57AD\u5A05\u6860\u6C29\u9609\u70DF\u76D0\u4E25\u5CA9\u989C\u960E\u8273\u538C\u781A\u5F66\u8C1A\u9A8C\u53A3\u8D5D\u4FE8\u5156\u8C33\u6079\u95EB\u917D\u9B47\u990D\u9F39\u9E2F\u6768\u626C\u75A1\u9633\u75D2\u517B\u6837\u7080\u7476\u6447\u5C27\u9065\u7A91\u8C23\u836F\u8F7A\u9E5E\u9CD0\u7237\u9875\u4E1A\u53F6\u9765\u8C12\u90BA\u6654\u70E8\u533B\u94F1\u9890\u9057\u4EEA\u8681\u827A\u4EBF\u5FC6\u4E49\u8BE3\u8BAE\u8C0A\u8BD1\u5F02\u7ECE\u8BD2\u5453\u5CC4\u9974\u603F\u9A7F\u7F22\u8F76\u8D3B\u9487\u9552\u9571\u7617\u8223\u836B\u9634\u94F6\u996E\u9690\u94DF\u763E\u6A31\u5A74\u9E70\u5E94\u7F28\u83B9\u8424\u8425\u8367\u8747\u8D62\u9896\u8314\u83BA\u8426\u84E5\u6484\u5624\u6EE2\u6F46\u748E\u9E66\u763F\u988F\u7F42\u54DF\u62E5\u4F63\u75C8\u8E0A\u548F\u955B\u4F18\u5FE7\u90AE\u94C0\u72B9\u8BF1\u83B8\u94D5\u9C7F\u8206\u9C7C\u6E14\u5A31\u4E0E\u5C7F\u8BED\u72F1\u8A89\u9884\u9A6D\u4F1B\u4FE3\u8C00\u8C15\u84E3\u5D5B\u996B\u9608\u59AA\u7EA1\u89CE\u6B24\u94B0\u9E46\u9E6C\u9F89\u9E33\u6E0A\u8F95\u56ED\u5458\u5706\u7F18\u8FDC\u6A7C\u9E22\u9F0B\u7EA6\u8DC3\u94A5\u7CA4\u60A6\u9605\u94BA\u90E7\u5300\u9668\u8FD0\u8574\u915D\u6655\u97F5\u90D3\u82B8\u607D\u6120\u7EAD\u97EB\u6B92\u6C32\u6742\u707E\u8F7D\u6512\u6682\u8D5E\u74D2\u8DB1\u933E\u8D43\u810F\u9A75\u51FF\u67A3\u8D23\u62E9\u5219\u6CFD\u8D5C\u5567\u5E3B\u7BA6\u8D3C\u8C2E\u8D60\u7EFC\u7F2F\u8F67\u94E1\u95F8\u6805\u8BC8\u658B\u503A\u6BE1\u76CF\u65A9\u8F97\u5D2D\u6808\u6218\u7EFD\u8C35\u5F20\u6DA8\u5E10\u8D26\u80C0\u8D75\u8BCF\u948A\u86F0\u8F99\u9517\u8FD9\u8C2A\u8F84\u9E67\u8D1E\u9488\u4FA6\u8BCA\u9547\u9635\u6D48\u7F1C\u6862\u8F78\u8D48\u796F\u9E29\u6323\u7741\u72F0\u4E89\u5E27\u75C7\u90D1\u8BC1\u8BE4\u5CE5\u94B2\u94EE\u7B5D\u7EC7\u804C\u6267\u7EB8\u631A\u63B7\u5E1C\u8D28\u6EDE\u9A98\u6809\u6800\u8F75\u8F7E\u8D3D\u9E37\u86F3\u7D77\u8E2C\u8E2F\u89EF\u949F\u7EC8\u79CD\u80BF\u4F17\u953A\u8BCC\u8F74\u76B1\u663C\u9AA4\u7EA3\u7EC9\u732A\u8BF8\u8BDB\u70DB\u77A9\u5631\u8D2E\u94F8\u9A7B\u4F2B\u69E0\u94E2\u4E13\u7816\u8F6C\u8D5A\u556D\u9994\u989E\u6869\u5E84\u88C5\u5986\u58EE\u72B6\u9525\u8D58\u5760\u7F00\u9A93\u7F12\u8C06\u51C6\u7740\u6D4A\u8BFC\u956F\u5179\u8D44\u6E0D\u8C18\u7F01\u8F8E\u8D40\u7726\u9531\u9F87\u9CBB\u8E2A\u603B\u7EB5\u506C\u90B9\u8BF9\u9A7A\u9CB0\u8BC5\u7EC4\u955E\u94BB\u7F35\u8E9C\u9CDF\u7FF1\u5E76\u535C\u6C89\u4E11\u6DC0\u8FED\u6597\u8303\u5E72\u768B\u7845\u67DC\u540E\u4F19\u79F8\u6770\u8BC0\u5938\u91CC\u91CC\u51CC\u4E48\u9709\u637B\u51C4\u6266\u5723\u5C38\u62AC\u6D82\u6D3C\u5582\u6C61\u9528\u54B8\u874E\u5F5D\u6D8C\u6E38\u5401\u5FA1\u613F\u5CB3\u4E91\u7076\u624E\u672D\u7B51\u4E8E\u5FD7\u6CE8\u51CB\u8BA0\u8C2B\u90C4\u52D0\u51FC\u5742\u5785\u57B4\u57EF\u57DD\u82D8\u836C\u836E\u839C\u83BC\u83F0\u85C1\u63F8\u5412\u5423\u5494\u549D\u54B4\u5658\u567C\u56AF\u5E5E\u5C99\u5D74\u5F77\u5FBC\u72B8\u72CD\u9980\u9987\u9993\u9995\u6123\u61B7\u61D4\u4E2C\u6E86\u6EDF\u6EB7\u6F24\u6F74\u6FB9\u752F\u7E9F\u7ED4\u7EF1\u73C9\u67A7\u684A\u6849\u69D4\u6A65\u8F71\u8F77\u8D4D\u80B7\u80E8\u98DA\u7173\u7145\u7198\u610D\u6DFC\u781C\u78D9\u770D\u949A\u94B7\u94D8\u94DE\u9503\u950D\u950E\u950F\u9518\u951D\u952A\u952B\u953F\u9545\u954E\u9562\u9565\u9569\u9572\u7A06\u9E4B\u9E5B\u9E71\u75AC\u75B4\u75D6\u766F\u88E5\u8941\u8022\u98A5\u87A8\u9EB4\u9C85\u9C86\u9C87\u9C9E\u9CB4\u9CBA\u9CBC\u9CCA\u9CCB\u9CD8\u9CD9\u9792\u97B4\u9F44\u4E2C\u4E3A\u4EB8\u4F17\u4F2A\u4F59\u51A2\u51C0\u51CC\u51FC\u522C\u52CB\u52D0\u52DA\u5364\u53C6\u53C7\u542F\u5494\u54A4\u54B4\u54CC\u54D7\u551D\u5521\u5523\u553F\u556E\u5570\u5574\u5475\u567C\u56AF\u5785\u57A7\u57AF\u57B1\u57D9\u57DD\u5846\u5899\u58F8\u59AB\u59DC\u5A34\u5A73\u5C43\u5CBD\u5CC3\u5CE3\u5D04\u5D5A\u5D5B\u5D74\u5EBC\u5F5F\u5FA1\u610D\u616D\u61B7\u624E\u6266\u631C\u6326\u637B\u63F8\u65F8\u663D\u672D\u684A\u68BC\u68BE\u68C2\u69DA\u6A90\u6C61\u6C93\u6CA8\u6CA9\u6CB5\u6D49\u6D50\u6D55\u6D8C\u6DA2\u6E7F\u6E87\u6EEA\u6F24\u7145\u7173\u7198\u7266\u729F\u72CD\u72DD\u732C\u7399\u739A\u73B1\u73C9\u73CF\u73F0\u740E\u7487\u7572\u75B4\u7606\u7618\u766F\u772C\u7740\u7841\u7845\u7859\u785A\u7877\u78B9\u78D9\u794E\u79FE\u7B5C\u7B7E\u7B93\u7CC7\u7E9F\u7EAE\u7EB4\u7EBB\u7EBC\u7ED6\u7EE4\u7EE6\u7EEC\u7EF1\u7EF9\u7F0A\u7F10\u7F1E\u7F30\u7FD9\u7FDA\u80B7\u810F\u814C\u8158\u816D\u81DC\u8273\u8279\u8359\u839C\u83BC\u841A\u85C1\u866C\u8780\u87CF\u8885\u8886\u88AF\u88C8\u88E5\u8941\u8955\u89C3\u89CD\u8A5F\u8BB1\u8BBB\u8BC7\u8BD0\u8BEA\u8C1E\u8C25\u8C37\u8C6E\u8D20\u8D4D\u8D51\u8D52\u8D57\u8D5F\u8D6A\u8DD6\u8DF6\u8E0A\u8F6A\u8F80\u8F8C\u8F92\u90C1\u90C4\u9166\u9245\u9274\u948E\u9491\u9496\u9498\u94B5\u94BB\u94CF\u94DA\u94E6\u94FB\u9508\u950F\u951C\u9520\u9528\u9533\u953D\u9543\u9548\u9555\u955A\u9560\u9562\u956E\u9574\u95EC\u95F2\u95FF\u9607\u9613\u9618\u961B\u9655\u97B4\u97E8\u988B\u988E\u9892\u9895\u9899\u98A3\u98CF\u98D0\u98D4\u98D6\u98D7\u9964\u9965\u9966\u9973\u9978\u9979\u997B\u997E\u9982\u9983\u9989\u998C\u998E\u9A72\u9A83\u9A89\u9A8D\u9A8E\u9A94\u9A95\u9A99\u9AA6\u9C7D\u9C7E\u9C80\u9C84\u9C89\u9C8A\u9C8C\u9C8F\u9C93\u9C96\u9C97\u9C98\u9C99\u9C9D\u9CAA\u9CAC\u9CAF\u9CB9\u9CBE\u9CBF\u9CC0\u9CC1\u9CC2\u9CC8\u9CC9\u9CD1\u9CD2\u9CDB\u9CE0\u9CE1\u9CE3\u9E24\u9E27\u9E2E\u9E30\u9E34\u9E3B\u9E3C\u9E40\u9E47\u9E4D\u9E50\u9E52\u9E53\u9E54\u9E56\u9E5D\u9E5F\u9E60\u9E61\u9E62\u9E65\u9E6F\u9E72\u9E74\u9EE1\u9F0C\u9F17\u9F81\u9F82\u5FD7\u5236\u54A8\u53EA\u7CFB\u677E\u5C1D\u9762\u5E72\u62FC\u6076\u8D5E\u53D1\u50F5\u81F4\u5978\u83B7\u7EC3\u56DE\u7CFB\u8FF9\u53EA\u8F9F\u677F\u4F60";
-}
-function ftPYStr() {
-  return "\u9312\u769A\u85F9\u7919\u611B\u566F\u5B21\u74A6\u66D6\u9744\u8AF3\u92A8\u9D6A\u9AAF\u8956\u5967\u5ABC\u9A41\u9C32\u58E9\u7F77\u9200\u64FA\u6557\u5504\u9812\u8FA6\u7D46\u9211\u5E6B\u7D81\u938A\u8B17\u525D\u98FD\u5BF6\u5831\u9B91\u9D07\u9F59\u8F29\u8C9D\u92C7\u72FD\u5099\u618A\u9D6F\u8CC1\u931B\u7E43\u7B46\u7562\u6583\u5E63\u9589\u84FD\u55F6\u6F77\u924D\u7BF3\u8E55\u908A\u7DE8\u8CB6\u8B8A\u8FAF\u8FAE\u8290\u7DF6\u7C69\u6A19\u9A43\u98AE\u98C6\u93E2\u9463\u9C3E\u9C49\u5225\u765F\u7015\u6FF1\u8CD3\u64EF\u5110\u7E7D\u6AB3\u6BAF\u81CF\u944C\u9AD5\u9B22\u9905\u7A1F\u64A5\u7F3D\u9251\u99C1\u9911\u9238\u9D53\u88DC\u923D\u8CA1\u53C3\u8836\u6B98\u615A\u6158\u71E6\u9A42\u9EF2\u84BC\u8259\u5009\u6EC4\u5EC1\u5074\u518A\u6E2C\u60FB\u5C64\u8A6B\u9364\u5115\u91F5\u6519\u647B\u87EC\u995E\u8B92\u7E8F\u93DF\u7522\u95E1\u986B\u56C5\u8AC2\u8B96\u8546\u61FA\u5B0B\u9A4F\u8998\u79AA\u9414\u5834\u5617\u9577\u511F\u8178\u5EE0\u66A2\u5000\u8407\u60B5\u95B6\u9BE7\u9214\u8ECA\u5FB9\u7868\u5875\u9673\u896F\u5096\u8AF6\u6AEC\u78E3\u9F54\u6490\u7A31\u61F2\u8AA0\u9A01\u68D6\u6A89\u92EE\u943A\u7661\u9072\u99B3\u6065\u9F52\u71BE\u98ED\u9D1F\u6C96\u885D\u87F2\u5BF5\u9283\u7587\u8E8A\u7C4C\u7DA2\u5114\u5E6C\u8B8E\u6AE5\u5EDA\u92E4\u96DB\u790E\u5132\u89F8\u8655\u82BB\u7D40\u8E95\u50B3\u91E7\u7621\u95D6\u5275\u6134\u9318\u7D9E\u7D14\u9D89\u7DBD\u8F1F\u9F6A\u8FAD\u8A5E\u8CDC\u9DBF\u8070\u8525\u56EA\u5F9E\u53E2\u84EF\u9A44\u6A05\u6E4A\u8F33\u8EA5\u7AC4\u651B\u932F\u92BC\u9E7A\u9054\u5660\u97C3\u5E36\u8CB8\u99D8\u7D3F\u64D4\u55AE\u9132\u64A3\u81BD\u619A\u8A95\u5F48\u6BAB\u8CE7\u7649\u7C1E\u7576\u64CB\u9EE8\u8569\u6A94\u8B9C\u78AD\u8960\u6417\u5CF6\u79B1\u5C0E\u76DC\u71FE\u71C8\u9127\u9419\u6575\u6ECC\u905E\u7DE0\u7CF4\u8A46\u8AE6\u7D88\u89BF\u93D1\u985B\u9EDE\u588A\u96FB\u5DD4\u923F\u7672\u91E3\u8ABF\u929A\u9BDB\u8ADC\u758A\u9C08\u91D8\u9802\u9320\u8A02\u92CC\u4E1F\u92A9\u6771\u52D5\u68DF\u51CD\u5D20\u9D87\u7AC7\u72A2\u7368\u8B80\u8CED\u934D\u7006\u6ADD\u7258\u7BE4\u9EF7\u935B\u65B7\u7DDE\u7C6A\u514C\u968A\u5C0D\u61DF\u9413\u5678\u9813\u920D\u71C9\u8E89\u596A\u58AE\u9438\u9D5D\u984D\u8A1B\u60E1\u9913\u8AE4\u580A\u95BC\u8EDB\u92E8\u9354\u9D9A\u984E\u9853\u9C77\u8A92\u5152\u723E\u990C\u8CB3\u9087\u927A\u9D2F\u9B9E\u767C\u7F70\u95A5\u743A\u792C\u91E9\u7169\u8CA9\u98EF\u8A2A\u7D21\u9201\u9B74\u98DB\u8AB9\u5EE2\u8CBB\u7DCB\u9428\u9BE1\u7D1B\u58B3\u596E\u61A4\u7CDE\u50E8\u8C50\u6953\u92D2\u98A8\u760B\u99AE\u7E2B\u8AF7\u9CF3\u7043\u819A\u8F3B\u64AB\u8F14\u8CE6\u5FA9\u8CA0\u8A03\u5A66\u7E1B\u9CE7\u99D9\u7D31\u7D3C\u8CFB\u9EA9\u9B92\u9C12\u91D3\u8A72\u9223\u84CB\u8CC5\u687F\u8D95\u7A08\u8D1B\u5C37\u641F\u7D3A\u5CA1\u525B\u92FC\u7DB1\u5D17\u6207\u93AC\u776A\u8AA5\u7E1E\u92EF\u64F1\u9D3F\u95A3\u927B\u500B\u7D07\u9398\u6F41\u7D66\u4E99\u8CE1\u7D86\u9BC1\u9F94\u5BAE\u978F\u8CA2\u9264\u6E9D\u830D\u69CB\u8CFC\u5920\u8A6C\u7DF1\u89AF\u8831\u9867\u8A41\u8F42\u9237\u932E\u9D23\u9D60\u9DBB\u526E\u639B\u9D30\u6451\u95DC\u89C0\u9928\u6163\u8CAB\u8A7F\u645C\u9E1B\u9C25\u5EE3\u7377\u898F\u6B78\u9F9C\u95A8\u8ECC\u8A6D\u8CB4\u528A\u532D\u528C\u5AAF\u6A9C\u9BAD\u9C56\u8F25\u6EFE\u889E\u7DC4\u9BC0\u934B\u570B\u904E\u581D\u54BC\u5E57\u69E8\u87C8\u927F\u99ED\u97D3\u6F22\u95DE\u7D4E\u9821\u865F\u705D\u9865\u95A1\u9DB4\u8CC0\u8A36\u95D4\u8823\u6A6B\u8F5F\u9D3B\u7D05\u9ECC\u8A0C\u8452\u958E\u9C5F\u58FA\u8B77\u6EEC\u6236\u6EF8\u9D98\u5629\u83EF\u756B\u5283\u8A71\u9A4A\u6A3A\u93F5\u61F7\u58DE\u6B61\u74B0\u9084\u7DE9\u63DB\u559A\u7613\u7165\u6E19\u5950\u7E6F\u9370\u9BC7\u9EC3\u8B0A\u9C09\u63EE\u8F1D\u6BC0\u8CC4\u7A62\u6703\u71F4\u532F\u8AF1\u8AA8\u7E6A\u8A7C\u8588\u5666\u6FAE\u7E62\u743F\u6689\u8477\u6E3E\u8AE2\u991B\u95BD\u7372\u8CA8\u798D\u9225\u944A\u64CA\u6A5F\u7A4D\u9951\u8DE1\u8B4F\u96DE\u7E3E\u7DDD\u6975\u8F2F\u7D1A\u64E0\u5E7E\u858A\u5291\u6FDF\u8A08\u8A18\u969B\u7E7C\u7D00\u8A10\u8A70\u85BA\u5630\u568C\u9A65\u74A3\u89AC\u9F4F\u78EF\u7F88\u8806\u8E8B\u973D\u9C6D\u9BFD\u593E\u83A2\u9830\u8CC8\u9240\u50F9\u99D5\u90DF\u6D79\u92CF\u93B5\u87EF\u6BB2\u76E3\u5805\u7B8B\u9593\u8271\u7DD8\u7E6D\u6AA2\u583F\u9E7C\u63C0\u64BF\u7C21\u5109\u6E1B\u85A6\u6ABB\u9452\u8E10\u8CE4\u898B\u9375\u8266\u528D\u991E\u6F38\u6FFA\u6F97\u8AEB\u7E11\u6214\u6229\u77BC\u9DBC\u7B67\u9C39\u97C9\u5C07\u6F3F\u8523\u69F3\u734E\u8B1B\u91AC\u7D73\u97C1\u81A0\u6F86\u9A55\u5B0C\u652A\u9278\u77EF\u50E5\u8173\u9903\u7E73\u7D5E\u8F4E\u8F03\u649F\u5DA0\u9DE6\u9BAB\u968E\u7BC0\u6F54\u7D50\u8AA1\u5C46\u7664\u981C\u9B9A\u7DCA\u9326\u50C5\u8B39\u9032\u6649\u71FC\u76E1\u52C1\u834A\u8396\u5DF9\u85CE\u9949\u7E09\u8D10\u89B2\u9BE8\u9A5A\u7D93\u9838\u975C\u93E1\u5F91\u75D9\u7AF6\u51C8\u5244\u6D87\u9015\u5F33\u811B\u975A\u7CFE\u5EC4\u820A\u9B2E\u9CE9\u9DF2\u99D2\u8209\u64DA\u92F8\u61FC\u5287\u8A4E\u5C68\u6AF8\u98B6\u9245\u92E6\u7AB6\u9F5F\u9D51\u7D79\u9308\u942B\u96CB\u89BA\u6C7A\u7D55\u8B4E\u73A8\u921E\u8ECD\u99FF\u76B8\u958B\u51F1\u5274\u584F\u613E\u6137\u93A7\u9347\u9F95\u958C\u9227\u92AC\u9846\u6BBC\u8AB2\u9A0D\u7DD9\u8EFB\u9233\u9301\u9837\u58BE\u61C7\u9F66\u93D7\u6473\u5EAB\u8932\u56B3\u584A\u5108\u9136\u5672\u81BE\u5BEC\u736A\u9AD6\u7926\u66E0\u6CC1\u8A86\u8A91\u913A\u58D9\u7E8A\u8CBA\u8667\u5DCB\u7ABA\u994B\u6F70\u5331\u8562\u6192\u8075\u7C23\u95AB\u9315\u9BE4\u64F4\u95CA\u8810\u881F\u81D8\u840A\u4F86\u8CF4\u5D0D\u5FA0\u6DF6\u7028\u8CDA\u775E\u9338\u7669\u7C5F\u85CD\u6B04\u6514\u7C43\u95CC\u862D\u703E\u8B95\u652C\u89BD\u61F6\u7E9C\u721B\u6FEB\u5D50\u6B16\u6595\u946D\u8964\u746F\u95AC\u92C3\u6488\u52DE\u6F87\u562E\u5D97\u92A0\u9412\u7646\u6A02\u9C33\u9433\u58D8\u985E\u6DDA\u8A84\u7E32\u7C6C\u8C8D\u96E2\u9BC9\u79AE\u9E97\u53B2\u52F5\u792B\u6B77\u701D\u96B8\u5137\u9148\u58E2\u85F6\u849E\u863A\u56A6\u9090\u9A6A\u7E2D\u6AEA\u6ADF\u8F62\u792A\u92F0\u9E1D\u7658\u7CF2\u8E92\u9742\u9C7A\u9C67\u5006\u806F\u84EE\u9023\u942E\u6190\u6F23\u7C3E\u6582\u81C9\u93C8\u6200\u7149\u7DF4\u861E\u5969\u7032\u7489\u6BAE\u8933\u895D\u9C31\u7CE7\u6DBC\u5169\u8F1B\u8AD2\u9B4E\u7642\u907C\u9410\u7E5A\u91D5\u9DEF\u7375\u81E8\u9130\u9C57\u51DC\u8CC3\u85FA\u5EE9\u6A81\u8F54\u8EAA\u9F61\u9234\u9748\u5DBA\u9818\u7DBE\u6B1E\u87F6\u9BEA\u993E\u5289\u700F\u9A2E\u7DB9\u93A6\u9DDA\u9F8D\u807E\u56A8\u7C60\u58DF\u650F\u96B4\u8622\u7027\u74CF\u6AF3\u6727\u7931\u6A13\u5A41\u645F\u7C0D\u50C2\u851E\u560D\u5D81\u93E4\u763A\u802C\u87BB\u9ACF\u8606\u76E7\u9871\u5EEC\u7210\u64C4\u9E75\u865C\u9B6F\u8CC2\u797F\u9304\u9678\u58DA\u64FC\u5695\u95AD\u7018\u6DE5\u6AE8\u6AD3\u8F64\u8F05\u8F46\u6C0C\u81DA\u9E15\u9DFA\u826B\u9C78\u5DD2\u6523\u5B7F\u7064\u4E82\u81E0\u5B4C\u6B12\u9E1E\u947E\u6384\u8F2A\u502B\u4F96\u6DEA\u7DB8\u8AD6\u5707\u863F\u7F85\u908F\u947C\u7C6E\u9A3E\u99F1\u7D61\u7296\u7380\u6FFC\u6B0F\u8161\u93CD\u9A62\u5442\u92C1\u4FB6\u5C62\u7E37\u616E\u6FFE\u7DA0\u6ADA\u8938\u92DD\u5638\u5ABD\u746A\u78BC\u879E\u99AC\u7F75\u55CE\u561C\u5B24\u69AA\u8CB7\u9EA5\u8CE3\u9081\u8108\u52F1\u779E\u9945\u883B\u6EFF\u8B3E\u7E35\u93DD\u9859\u9C3B\u8C93\u9328\u925A\u8CBF\u9EBC\u6C92\u9382\u9580\u60B6\u5011\u636B\u71DC\u61E3\u9346\u9333\u5922\u7787\u8B0E\u5F4C\u8993\u51AA\u7F8B\u8B10\u737C\u79B0\u7DBF\u7DEC\u6FA0\u9766\u9EFD\u5EDF\u7DF2\u7E46\u6EC5\u61AB\u95A9\u9594\u7DE1\u9CF4\u9298\u8B2C\u8B28\u9A40\u9943\u6B7F\u93CC\u8B00\u755D\u926C\u5436\u9209\u7D0D\u96E3\u6493\u8166\u60F1\u9B27\u9403\u8A25\u9912\u5167\u64EC\u81A9\u922E\u9BE2\u6506\u8F26\u9BF0\u91C0\u9CE5\u8526\u88CA\u8076\u5699\u9477\u93B3\u9689\u8617\u56C1\u9862\u8EA1\u6AB8\u7370\u5BE7\u64F0\u6FD8\u82E7\u5680\u8079\u9215\u7D10\u81BF\u6FC3\u8FB2\u5102\u5665\u99D1\u91F9\u8AFE\u513A\u7627\u6B50\u9DD7\u6BC6\u5614\u6F1A\u8B33\u616A\u750C\u76E4\u8E63\u9F90\u62CB\u76B0\u8CE0\u8F61\u5674\u9D6C\u7D15\u7F86\u9239\u9A19\u8ADE\u99E2\u98C4\u7E39\u983B\u8CA7\u5B2A\u860B\u6191\u8A55\u6F51\u9817\u91D9\u64B2\u92EA\u6A38\u8B5C\u93F7\u9420\u68F2\u81CD\u9F4A\u9A0E\u8C48\u555F\u6C23\u68C4\u8A16\u8604\u9A0F\u7DBA\u69BF\u78E7\u980E\u980F\u9C2D\u727D\u91EC\u925B\u9077\u7C3D\u8B19\u9322\u9257\u6F5B\u6DFA\u8B74\u5879\u50C9\u8541\u6173\u9A2B\u7E7E\u69E7\u9210\u69CD\u55C6\u58BB\u8594\u5F37\u6436\u5B19\u6AA3\u6227\u7197\u9306\u93D8\u93F9\u7FA5\u8E4C\u936C\u6A4B\u55AC\u50D1\u7FF9\u7AC5\u8A9A\u8B59\u854E\u7E70\u78FD\u8E7A\u7ACA\u611C\u9365\u7BCB\u6B3D\u89AA\u5BE2\u92DF\u8F15\u6C2B\u50BE\u9803\u8ACB\u6176\u64B3\u9BD6\u74CA\u7AAE\u7162\u86FA\u5DF0\u8CD5\u87E3\u9C0D\u8DA8\u5340\u8EC0\u9A45\u9F72\u8A58\u5D87\u95C3\u89B7\u9D1D\u9874\u6B0A\u52F8\u8A6E\u7DA3\u8F07\u9293\u537B\u9D72\u78BA\u95CB\u95D5\u6128\u8B93\u9952\u64FE\u7E5E\u8558\u5B08\u6A48\u71B1\u97CC\u8A8D\u7D09\u98EA\u8ED4\u69AE\u7D68\u5DB8\u8811\u7E1F\u92A3\u9870\u8EDF\u92B3\u8706\u958F\u6F64\u7051\u85A9\u98AF\u9C13\u8CFD\u5098\u6BFF\u7CDD\u55AA\u9A37\u6383\u7E45\u6F80\u55C7\u92AB\u7A61\u6BBA\u524E\u7D17\u93A9\u9BCA\u7BE9\u66EC\u91C3\u522A\u9583\u965C\u8D0D\u7E55\u8A15\u59CD\u9A38\u91E4\u9C54\u5891\u50B7\u8CDE\u5770\u6BA4\u89F4\u71D2\u7D39\u8CD2\u651D\u61FE\u8A2D\u5399\u7044\u756C\u7D33\u5BE9\u5B38\u814E\u6EF2\u8A75\u8AD7\u700B\u8072\u7E69\u52DD\u5E2B\u7345\u6FD5\u8A69\u6642\u8755\u5BE6\u8B58\u99DB\u52E2\u9069\u91CB\u98FE\u8996\u8A66\u8B1A\u5852\u8494\u5F12\u8EFE\u8CB0\u9230\u9C23\u58FD\u7378\u7DAC\u6A1E\u8F38\u66F8\u8D16\u5C6C\u8853\u6A39\u8C4E\u6578\u6504\u7D13\u5E25\u9582\u96D9\u8AB0\u7A05\u9806\u8AAA\u78A9\u720D\u9460\u7D72\u98FC\u5EDD\u99DF\u7DE6\u9376\u9DE5\u8073\u616B\u980C\u8A1F\u8AA6\u64FB\u85EA\u993F\u98BC\u93AA\u8607\u8A34\u8085\u8B16\u7A4C\u96D6\u96A8\u7D8F\u6B72\u8AB6\u5B6B\u640D\u7B4D\u84C0\u733B\u7E2E\u7463\u9396\u55E9\u8127\u737A\u64BB\u95E5\u9248\u9C28\u81FA\u614B\u9226\u9B90\u6524\u8CAA\u7671\u7058\u58C7\u8B5A\u8AC7\u5606\u66C7\u926D\u931F\u9807\u6E6F\u71D9\u513B\u9933\u940B\u93DC\u6FE4\u7D73\u8A0E\u97DC\u92F1\u9A30\u8B04\u92BB\u984C\u9AD4\u5C5C\u7DF9\u9D5C\u95D0\u689D\u7CF6\u9F60\u9C37\u8CBC\u9435\u5EF3\u807D\u70F4\u9285\u7D71\u615F\u982D\u9204\u79BF\u5716\u91F7\u5718\u6476\u9839\u86FB\u98E9\u812B\u9D15\u99B1\u99DD\u6A62\u7C5C\u9F09\u896A\u5AA7\u8183\u5F4E\u7063\u9811\u842C\u7D08\u7DB0\u7DB2\u8F1E\u97CB\u9055\u570D\u70BA\u6FF0\u7DAD\u8466\u5049\u507D\u7DEF\u8B02\u885B\u8AC9\u5E43\u95C8\u6E88\u6F7F\u744B\u97D9\u7152\u9BAA\u6EAB\u805E\u7D0B\u7A69\u554F\u95BF\u7515\u64BE\u8778\u6E26\u7AA9\u81E5\u8435\u9F77\u55DA\u93A2\u70CF\u8AA3\u7121\u856A\u5433\u5862\u9727\u52D9\u8AA4\u9114\u5EE1\u61AE\u5AF5\u9A16\u9D61\u9DA9\u932B\u72A7\u8972\u7FD2\u9291\u6232\u7D30\u993C\u9B29\u74BD\u89A1\u8766\u8F44\u5CFD\u4FE0\u72F9\u5EC8\u5687\u7864\u9BAE\u7E96\u8CE2\u929C\u9591\u986F\u96AA\u73FE\u737B\u7E23\u9921\u7FA8\u61B2\u7DDA\u83A7\u859F\u861A\u5CF4\u736B\u5AFB\u9DF4\u7647\u8814\u79C8\u8E9A\u5EC2\u9472\u9109\u8A73\u97FF\u9805\u858C\u9909\u9A64\u7DD7\u9957\u856D\u56C2\u92B7\u66C9\u562F\u5635\u701F\u9A4D\u7D83\u689F\u7C2B\u5354\u633E\u651C\u8105\u8AE7\u5BEB\u7009\u8B1D\u893B\u64F7\u7D32\u7E88\u92C5\u91C1\u8208\u9658\u6ECE\u5147\u6D36\u92B9\u7E61\u9948\u9D42\u865B\u5653\u9808\u8A31\u6558\u7DD2\u7E8C\u8A61\u980A\u8ED2\u61F8\u9078\u766C\u7D62\u8AFC\u9249\u93C7\u5B78\u8B14\u6FA9\u9C48\u52DB\u8A62\u5C0B\u99B4\u8A13\u8A0A\u905C\u5864\u6F6F\u9C58\u58D3\u9D09\u9D28\u555E\u4E9E\u8A1D\u57E1\u5A6D\u690F\u6C2C\u95B9\u7159\u9E7D\u56B4\u5DD6\u984F\u95BB\u8277\u53AD\u786F\u5F65\u8AFA\u9A57\u53B4\u8D17\u513C\u5157\u8B9E\u61E8\u9586\u91C5\u9B58\u995C\u9F34\u9D26\u694A\u63DA\u760D\u967D\u7662\u990A\u6A23\u716C\u7464\u6416\u582F\u9059\u7AAF\u8B20\u85E5\u8EFA\u9DC2\u9C29\u723A\u9801\u696D\u8449\u9768\u8B01\u9134\u66C4\u71C1\u91AB\u92A5\u9824\u907A\u5100\u87FB\u85DD\u5104\u61B6\u7FA9\u8A63\u8B70\u8ABC\u8B6F\u7570\u7E79\u8A52\u56C8\u5DA7\u98F4\u61CC\u9A5B\u7E0A\u8EFC\u8CBD\u91D4\u93B0\u943F\u761E\u8264\u852D\u9670\u9280\u98F2\u96B1\u92A6\u766E\u6AFB\u5B30\u9DF9\u61C9\u7E93\u7469\u87A2\u71DF\u7192\u8805\u8D0F\u7A4E\u584B\u9DAF\u7E08\u93A3\u6516\u56B6\u7005\u7020\u74D4\u9E1A\u766D\u9826\u7F4C\u55B2\u64C1\u50AD\u7670\u8E34\u8A60\u93DE\u512A\u6182\u90F5\u923E\u7336\u8A98\u8555\u92AA\u9B77\u8F3F\u9B5A\u6F01\u5A1B\u8207\u5DBC\u8A9E\u7344\u8B7D\u9810\u99AD\u50B4\u4FC1\u8ADB\u8AED\u8577\u5D33\u98EB\u95BE\u5AD7\u7D06\u89A6\u6B5F\u923A\u9D52\u9DF8\u9F6C\u9D1B\u6DF5\u8F45\u5712\u54E1\u5713\u7DE3\u9060\u6ADE\u9CF6\u9EFF\u7D04\u8E8D\u9470\u7CB5\u6085\u95B1\u925E\u9116\u52FB\u9695\u904B\u860A\u919E\u6688\u97FB\u9106\u8553\u60F2\u614D\u7D1C\u97DE\u6B9E\u6C33\u96DC\u707D\u8F09\u6522\u66AB\u8D0A\u74DA\u8DB2\u93E8\u8D13\u81DF\u99D4\u947F\u68D7\u8CAC\u64C7\u5247\u6FA4\u8CFE\u5616\u5E58\u7C00\u8CCA\u8B56\u8D08\u7D9C\u7E52\u8ECB\u9358\u9598\u67F5\u8A50\u9F4B\u50B5\u6C08\u76DE\u65AC\u8F3E\u5D84\u68E7\u6230\u7DBB\u8B6B\u5F35\u6F32\u5E33\u8CEC\u8139\u8D99\u8A54\u91D7\u87C4\u8F4D\u937A\u9019\u8B2B\u8F12\u9DD3\u8C9E\u91DD\u5075\u8A3A\u93AE\u9663\u6E5E\u7E1D\u6968\u8EEB\u8CD1\u798E\u9D06\u6399\u775C\u7319\u722D\u5E40\u7665\u912D\u8B49\u8ACD\u5D22\u9266\u931A\u7B8F\u7E54\u8077\u57F7\u7D19\u646F\u64F2\u5E5F\u8CEA\u6EEF\u9A2D\u6ADB\u6894\u8EF9\u8F0A\u8D04\u9DD9\u8784\u7E36\u8E93\u8E91\u89F6\u9418\u7D42\u7A2E\u816B\u773E\u937E\u8B05\u8EF8\u76BA\u665D\u9A5F\u7D02\u7E10\u8C6C\u8AF8\u8A85\u71ED\u77DA\u56D1\u8CAF\u9444\u99D0\u4F47\u6AE7\u9296\u5C08\u78DA\u8F49\u8CFA\u56C0\u994C\u9873\u6A01\u838A\u88DD\u599D\u58EF\u72C0\u9310\u8D05\u589C\u7DB4\u9A05\u7E0B\u8AC4\u6E96\u8457\u6FC1\u8AD1\u9432\u8332\u8CC7\u6F2C\u8AEE\u7DC7\u8F1C\u8CB2\u7725\u9319\u9F5C\u9BD4\u8E64\u7E3D\u7E31\u50AF\u9112\u8ACF\u9A36\u9BEB\u8A5B\u7D44\u93C3\u9246\u7E98\u8EA6\u9C52\u7FFA\u4E26\u8514\u6C88\u919C\u6FB1\u53E0\u9B25\u7BC4\u5E79\u81EF\u77FD\u6AC3\u5F8C\u5925\u7A2D\u5091\u8A23\u8A87\u88E1\u88CF\u6DE9\u9EBD\u9EF4\u649A\u6DD2\u6261\u8056\u5C4D\u64E1\u5857\u7AAA\u9935\u6C59\u9341\u9E79\u880D\u5F5C\u6E67\u904A\u7C72\u79A6\u9858\u5DBD\u96F2\u7AC8\u7D2E\u5284\u7BC9\u65BC\u8A8C\u8A3B\u96D5\u8A01\u8B7E\u90E4\u731B\u6C39\u962A\u58DF\u5816\u57B5\u588A\u6ABE\u8552\u8464\u84E7\u8493\u83C7\u69C1\u6463\u54A4\u551A\u54E2\u565D\u5645\u6485\u5288\u8B14\u8946\u5DB4\u810A\u4EFF\u50E5\u7341\u9E85\u9918\u9937\u994A\u9962\u695E\u6035\u61CD\u723F\u6F35\u7069\u6DF7\u6FEB\u7026\u6DE1\u5BE7\u7CF8\u7D5D\u7DD4\u7449\u6898\u68EC\u6848\u6A70\u6AEB\u8EF2\u8EE4\u8CEB\u8181\u8156\u98C8\u7CCA\u7146\u6E9C\u6E63\u6E3A\u78B8\u6EFE\u7798\u9208\u9255\u92E3\u92B1\u92E5\u92F6\u9426\u9427\u9369\u9340\u9343\u9307\u9384\u9387\u93BF\u941D\u9465\u9479\u9454\u7A6D\u9D93\u9DA5\u9E0C\u7667\u5C59\u7602\u81D2\u8947\u7E48\u802E\u986C\u87CE\u9EAF\u9B81\u9B83\u9B8E\u9BD7\u9BDD\u9BF4\u9C5D\u9BFF\u9C20\u9C35\u9C45\u97BD\u97DD\u9F47\u4E2C\u7232\u56B2\u8846\u50DE\u9918\u51A2\u6DE8\u51CC\u51FC\u5257\u52F3\u52D0\u52E9\u6EF7\u9749\u9746\u5553\u5494\u5412\u54B4\u54CC\u8B41\u55CA\u5562\u5523\u553F\u9F67\u56C9\u563D\u5475\u567C\u56AF\u58E0\u57A7\u58B6\u58CB\u58CE\u57DD\u58EA\u7246\u58FC\u5B00\u59DC\u5AFA\u5AFF\u5C53\u5D2C\u5DA8\u5DA2\u5DAE\u5D94\u5D5B\u5D74\u5ECE\u5F60\u5FA1\u610D\u6196\u61B7\u624E\u6266\u6397\u648F\u637B\u63F8\u6698\u66E8\u672D\u684A\u6AAE\u68F6\u6AFA\u6A9F\u6A90\u6C61\u6C93\u6E22\u6F59\u6CB5\u6EAE\u6EFB\u6FDC\u6D8C\u6EB3\u6EBC\u6F0A\u6FA6\u6F24\u7145\u7173\u7198\u729B\u729F\u72CD\u736E\u875F\u74B5\u7452\u7472\u73C9\u73CF\u74AB\u74A1\u7487\u7572\u75FE\u762E\u763B\u766F\u77D3\u7740\u785C\u7845\u78D1\u7904\u7906\u78B9\u78D9\u7995\u7A60\u7C39\u7C64\u7C59\u9931\u7CF9\u7D18\u7D1D\u7D35\u7D16\u7D70\u7D8C\u7D5B\u7DD3\u979D\u7DAF\u7E15\u7DDA\u7E17\u7E6E\u7FFD\u7FEC\u80B7\u9AD2\u9183\u8195\u9F76\u81E2\u8C54\u8279\u8598\u839C\u84F4\u8600\u85C1\u866F\u87BF\u8828\u5ACB\u8918\u894F\u890C\u8949\u8941\u8974\u898E\u89A5\u8B8B\u8A12\u8A29\u8A57\u8A56\u8B78\u8ADD\u8AE1\u8C37\u8C76\u8C9F\u9F4E\u8D14\u8CD9\u8CF5\u8D07\u8D6C\u8DD6\u8E82\u8E0A\u8ED1\u8F08\u8F2C\u8F40\u9B31\u90C4\u91B1\u9245\u9451\u91FA\u9212\u935A\u9203\u9262\u947D\u9276\u928D\u929B\u92D9\u93FD\u9417\u9321\u9329\u6774\u9348\u9360\u93A1\u939B\u9394\u93F0\u93D0\u9481\u9436\u945E\u9588\u9592\u95D3\u95CD\u95E0\u95D2\u95E4\u965D\u97B4\u97CD\u9832\u71B2\u982E\u9834\u9852\u7E87\u98BA\u98AD\u98B8\u98BB\u98C0\u98E3\u98E2\u98E5\u98FF\u9904\u990E\u990F\u9916\u9915\u991C\u9936\u9941\u993A\u99B9\u99F0\u9A6B\u9A02\u99F8\u9A0C\u9A4C\u9A24\u9A66\u9B5B\u9B62\u9B68\u9B7A\u9B8B\u9B93\u9B8A\u9B8D\u9BB3\u9BA6\u9C02\u9B9C\u9C60\u9BBA\u9BB6\u9BD2\u9BD5\u9C3A\u9C0F\u9C68\u9BF7\u9C2E\u9C03\u9C01\u9C42\u9C1F\u9C1C\u9C3C\u9C6F\u9C64\u9C63\u9CF2\u9DAC\u9D1E\u9D12\u9DFD\u9D34\u9D43\u9D50\u9DF3\u9D7E\u9D6E\u9D8A\u9D77\u9DEB\u9DA1\u9DCA\u9DB2\u9DB9\u9DBA\u9DC1\u9DD6\u9E07\u9E0F\u9E18\u9EF6\u9F02\u9780\u9F55\u9F57\u5FD7\u5236\u8AEE\u53EA\u7CFB\u9B06\u5690\u9762\u4E7E\u62FC\u5641\u8B9A\u9AEE\u6BAD\u7DFB\u59E6\u7A6B\u934A\u8FF4\u4FC2\u8E5F\u96BB\u95E2\u95C6\u59B3";
-}
-function traditionalized(cc) {
-  let str = "";
-  for (let i = 0; i < cc.length; i++) {
-    if (charPYStr().indexOf(cc.charAt(i)) != -1)
-      str += ftPYStr().charAt(charPYStr().indexOf(cc.charAt(i)));
-    else
-      str += cc.charAt(i);
-  }
-  return str;
-}
-function simplized(cc) {
-  let str = "";
-  for (let i = 0; i < cc.length; i++) {
-    if (ftPYStr().indexOf(cc.charAt(i)) != -1)
-      str += charPYStr().charAt(ftPYStr().indexOf(cc.charAt(i)));
-    else
-      str += cc.charAt(i);
-  }
-  return str;
-}
-function isNonChinese(str) {
-  const chineseRegex = /[\u4e00-\u9fff]/;
-  return !chineseRegex.test(str);
 }
 
 // danmu_api/utils/danmu-util.js
@@ -3105,11 +3206,14 @@ function groupDanmusByMinute(filteredDanmus, n) {
           count: 0,
           earliestT: danmu.t,
           cid: danmu.cid,
-          p: danmu.p
+          p: danmu.p,
+          like: 0
+          // 初始化like字段
         };
       }
       acc[message].count += 1;
       acc[message].earliestT = Math.min(acc[message].earliestT, danmu.t);
+      acc[message].like += danmu.like !== void 0 ? danmu.like : 0;
       return acc;
     }, {});
     return Object.keys(groupedByMessage).map((message) => {
@@ -3121,11 +3225,42 @@ function groupDanmusByMinute(filteredDanmus, n) {
         p: data.p,
         // 仅当计算后的逻辑计数大于1时才显示 "x N"
         m: displayCount > 1 ? `${message} x ${displayCount}` : message,
-        t: data.earliestT
+        t: data.earliestT,
+        like: data.like
+        // 包含合并后的like字段
       };
     });
   });
   return result.flat().sort((a, b) => a.t - b.t);
+}
+function handleDanmusLike(groupedDanmus) {
+  if (!globals.likeSwitch) {
+    return groupedDanmus;
+  }
+  return groupedDanmus.map((item) => {
+    if (!item.like || item.like < 5) {
+      return item;
+    }
+    const lowThresholdSources = ["[hanjutv]", "[sohu]", "[bilibili1]", "[migu]"];
+    const isLowThresholdSource = lowThresholdSources.some((source) => item.p.includes(source));
+    const threshold = isLowThresholdSource ? 100 : 1e3;
+    const icon = item.like >= threshold ? "\u{1F525}" : "\uFE0F\u2661";
+    let formattedLike;
+    if (item.like >= 1e4) {
+      formattedLike = (item.like / 1e4).toFixed(1) + "w";
+    } else if (item.like >= 1e3) {
+      formattedLike = (item.like / 1e3).toFixed(1) + "k";
+    } else {
+      formattedLike = item.like.toString();
+    }
+    const likeText = `${icon}${formattedLike}`;
+    const newM = item.m + likeText;
+    const { like, ...rest } = item;
+    return {
+      ...rest,
+      m: newM
+    };
+  });
 }
 function limitDanmusByCount(filteredDanmus, danmuLimit) {
   if (danmuLimit === 0) {
@@ -3203,7 +3338,7 @@ function convertToDanmakuJson(contents, platform) {
       color,
       `[${platform}]`
     ].join(",");
-    danmus.push({ p: attributes, m, cid: cidCounter++ });
+    danmus.push({ p: attributes, m, cid: cidCounter++, like: item?.like });
   }
   const regexArray = globals.blockedWords.split(/(?<=\/),(?=\/)/).map((str) => {
     const pattern = str.trim();
@@ -3225,7 +3360,8 @@ function convertToDanmakuJson(contents, platform) {
   });
   log("info", `\u53BB\u91CD\u5206\u949F\u6570: ${globals.groupMinute}`);
   const groupedDanmus = groupDanmusByMinute(filteredDanmus, globals.groupMinute);
-  let convertedDanmus = limitDanmusByCount(groupedDanmus, globals.danmuLimit);
+  const likeDanmus = handleDanmusLike(groupedDanmus);
+  let convertedDanmus = limitDanmusByCount(likeDanmus, globals.danmuLimit);
   if (globals.convertTopBottomToScroll || globals.convertColor === "white" || globals.convertColor === "color") {
     let topBottomCount = 0;
     let colorCount = 0;
@@ -3301,6 +3437,12 @@ function rgbToInt(color) {
     return -1;
   }
   return color.r * 256 * 256 + color.g * 256 + color.b;
+}
+function hexToInt(hex) {
+  if (typeof hex !== "string" || hex.length !== 6 || !/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    return 16777215;
+  }
+  return parseInt(hex, 16);
 }
 function convertDanmuToXml(danmuData) {
   let xml = '<?xml version="1.0" ?>\n';
@@ -3702,7 +3844,7 @@ async function getTmdbJaOriginalTitle(title, signal = null, sourceLabel = "Unkno
       } catch (error) {
         if (error.name === "AbortError") {
           log("info", `[TMDB] \u540E\u53F0\u641C\u7D22\u4EFB\u52A1\u5DF2\u5B8C\u5168\u7EC8\u6B62 (${cleanTitle})`);
-          throw error;
+          return null;
         }
         log("error", "[TMDB] Background Search error:", {
           message: error.message,
@@ -3850,164 +3992,245 @@ function smartTitleReplace(animes, cnAlias) {
 var MERGE_DELIMITER = "$$$";
 var DISPLAY_CONNECTOR = "&";
 var ENABLE_VERBOSE_MERGE_LOG = false;
+var MergeWeights = Object.freeze({
+  // 标题与结构
+  TITLE_STRUCTURE_CONFLICT: -0.15,
+  // 标题结构冲突（如父子集关系）
+  LANG_MATCH_CN: 0.15,
+  // 双端均为中文时的奖励
+  LANG_MISMATCH: -0.2,
+  // 语言不一致时的惩罚
+  // 日期
+  DATE_MATCH: 0,
+  // 基础日期匹配（动态计算，此处为占位）
+  // 集数对齐 (Alignment)
+  EP_ALIGN: {
+    MOVIE_TYPE_MISMATCH: -5,
+    // 电影/TV 类型不符
+    SPECIAL_STRICT_MISMATCH: -8,
+    // 正片与番外（SP/OVA）混淆
+    LANG_MATCH: 3,
+    // 集标题语言一致
+    LANG_MISMATCH: -5,
+    // 集标题语言不一致
+    SEASON_NUM_MISMATCH: -10,
+    // 季度编号冲突
+    SPECIAL_TYPE_MISMATCH: -10,
+    // 特殊类型（OP/ED）不一致
+    SPECIAL_TYPE_MATCH: 3,
+    // 特殊类型一致
+    IS_SPECIAL_MATCH: 3,
+    // 是否为特殊集属性一致
+    SEASON_SHIFT_EXACT: 15,
+    // 完美的季度偏移匹配（如 S2E1 -> S1E13）
+    CN_STRICT_MATCH: 25,
+    // 中文严格 核心词命中且集数一致的奖励
+    CN_STRICT_MISMATCH: -5,
+    // 中文严格 核心词包含但集数不同（防止同系列不同集数的误对齐）
+    NUMERIC_MATCH: 2,
+    // 数字严格相等
+    PATTERN_CONSISTENCY_BONUS: 2,
+    // 强规律性奖励
+    ZERO_DIFF_BONUS_BASE: 100,
+    // 零偏移的额外基准奖励
+    ZERO_DIFF_BONUS_PER_HIT: 5
+    // 零偏移的单次命中奖励
+  }
+});
+var Thresholds = Object.freeze({
+  SIMILARITY_MIN: 0.6,
+  // 最低标题相似度
+  SIMILARITY_STRONG: 0.98,
+  // 强匹配（Probe确认后）
+  TIER_DEFAULT: 1e-3,
+  // 默认分数梯度容差
+  TIER_CN: 0.4,
+  // 中文优先梯度容差
+  TIER_PART: 0.5,
+  // Part分部容差
+  COLLECTION_RATIO: 4,
+  // 合集判定比率上限
+  COLLECTION_DIFF: 6
+  // 合集判定数量差阈值
+});
 function log2(level, ...args) {
   const isMergeCheck = typeof args[0] === "string" && args[0].includes("[Merge-Check]");
-  if (isMergeCheck && !ENABLE_VERBOSE_MERGE_LOG) {
-    return;
-  }
+  if (isMergeCheck && !ENABLE_VERBOSE_MERGE_LOG) return;
   log(level, ...args);
 }
-var REGEX_PURE_SEASON_PART = /^(?:(?:第|S(?:eason)?)\s*\d+(?:季|期|部)?|(?:Part|P|第)\s*\d+(?:部分)?)$/i;
-var RE_LANG_CN = /(普通话|国语|中文配音|中配|中文版|粤配|粤语)/;
-var RE_LANG_JP = /(日语|日配|原版|原声)/;
-var RE_NA_TAG = /(\(|（|\[)N\/A(\)|）|\])/gi;
-var RE_PART_NORM = /第(\d+)部分/g;
-var RE_PART_NORM_2 = /(?:Part|P)[\s.]*(\d+)/gi;
-var RE_FINAL_SEASON = /(?:The\s+)?Final\s+Season/gi;
-var RE_SEASON_NORM = /(?:Season|S)\s*(\d+)/gi;
-var RE_CN_SEASON = /第([一二三四五六七八九十])季/g;
-var RE_ROMAN_SEASON = /(\s|^)(IV|III|II|I)(\s|$)/g;
-var RE_CN_DUB_VER = /(\(|（|\[)?(普通话|国语|中文配音|中配|中文)版?(\)|）|\])?/g;
-var RE_JP_DUB_VER = /(\(|（|\[)?(日语|日配|原版|原声)版?(\)|）|\])?/g;
-var RE_SOURCE_TAG = /【.*?】/g;
-var RE_REGION_LIMIT = /(\(|（|\[)仅限.*?地区(\)|）|\])/g;
-var RE_PUNCTUATION = /[!！?？,，.。、~～:：\-–—_]/g;
-var RE_WHITESPACE = /\s+/g;
-var RE_FROM_SUFFIX = /\s*from\s+.*$/i;
-var RE_PARENTHESES_CONTENT = /(\(|（|\[).*?(\)|）|\])/g;
-var RE_SEASON_INFO_STRONG = /(?:season|s|第)\s*[0-9一二三四五六七八九十]+\s*(?:季|期|部(?!分))?/gi;
-var RE_PART_INFO_STRONG = /(?:part|p|第)\s*\d+\s*(?:部分)?/gi;
-var RE_MOVIE_KEYWORDS = /剧场版|movie|film|电影|/gi;
-var RE_LANG_KEYWORDS_STRONG = /(?:中配|普通话|国语|日语|原声|粤配|粤语|日配)(?:版)?/g;
-var RE_LONE_VER_CHAR = /(\s|^)版(\s|$)/g;
-var RE_NON_ALPHANUM_CN = /[^\u4e00-\u9fa5a-zA-Z0-9]/g;
-var RE_EP_SUFFIX_DIGIT = /_\d+(?=$|\s)/g;
-var RE_FILE_NOISE = /_(\d{2,4})(?=\.)/g;
-var RE_EP_SEASON_PREFIX = /(?:^|\s)(?:第[0-9一二三四五六七八九十]+季|S[0-9]+)(?:\s+|_)/gi;
-var RE_LANG_CN_STD = /普通话|国语/g;
-var RE_LANG_JP_STD = /原声|原版/g;
-var RE_EP_PUNCTUATION = /[!！?？,，.。、~～:：\-–—]/g;
-var RE_META_SUFFIX = /(\(|（|\[)(续篇|TV版|无修|未删减|完整版)(\)|）|\])/gi;
-var RE_YEAR_TAG = /(\(|（|\[)\d{4}(\)|）|\]).*$/i;
-var RE_SUBTITLE_SEPARATOR = /^[\s:：\-–—(（\[【]/;
-var RE_SPACE_STRUCTURE = /.+[\s\u00A0\u3000].+/;
-var RE_SPLIT_SPACES = /[\s\u00A0\u3000]+/;
+var RegexStore = {
+  Lang: {
+    CN: /(普通话|国语|中文配音|中配|中文|粤配|粤语|台配|台语|港配|港语|字幕|助听)(?:版)?/,
+    JP: /(日语|日配|原版|原声)(?:版)?/,
+    CN_DUB_VER: /(\(|（|\[)?(普通话|国语|中文配音|中配|中文|粤配|粤语|台配|台语|港配|港语|字幕|助听)版?(\)|）|\])?/g,
+    JP_DUB_VER: /(\(|（|\[)?(日语|日配|原版|原声)版?(\)|）|\])?/g,
+    KEYWORDS_STRONG: /(?:普通话|国语|中文配音|中配|中文|粤配|粤语|台配|台语|港配|港语|字幕|助听|日语|日配|原版|原声)(?:版)?/g,
+    CN_STD: /普通话|国语|中文配音|中配|中文|粤配|粤语|台配|台语|港配|港语|字幕|助听/g,
+    JP_STD: /日语|日配|原版|原声/g
+  },
+  Season: {
+    PURE_PART: /^(?:(?:第|S(?:eason)?)\s*\d+(?:季|期|部)?|(?:Part|P|第)\s*\d+(?:部分)?)$/i,
+    PART_NORM: /第(\d+)部分/g,
+    PART_NORM_2: /(?:Part|P)[\s.]*(\d+)/gi,
+    FINAL: /(?:The\s+)?Final\s+Season/gi,
+    NORM: /(?:Season|S)\s*(\d+)/gi,
+    CN: /第([一二三四五六七八九十])季/g,
+    ROMAN: /(\s|^)(IV|III|II|I)(\s|$)/g,
+    INFO_STRONG: /(?:season|s|第)\s*[0-9一二三四五六七八九十]+\s*(?:季|期|部(?!分))?/gi,
+    PART_INFO_STRONG: /(?:part|p|第)\s*\d+\s*(?:部分)?/gi,
+    PART_ANY: /(?:part|p)\s*\d+/gi,
+    CN_STRUCTURE: /(?:^|\s|×\d+\s?)(承|转|结)(?=$|[\s\(\（\[【])/i,
+    SUFFIX_AMBIGUOUS: /(?:[\s\u4e00-\u9fa5]|^)(S|T|R|II|III|IV)(?=$|[\s\(\（\[【])/i,
+    SUFFIX_SEQUEL: /(?:续篇|续集|The Sequel)/i
+  },
+  Clean: {
+    NA_TAG: /(\(|（|\[)N\/A(\)|）|\])/gi,
+    SOURCE_TAG: /【.*?】/g,
+    REGION_LIMIT: /(\(|（|\[)仅限.*?地区(\)|）|\])/g,
+    PUNCTUATION: /[!！?？,，.。、~～:：\-–—_]/g,
+    WHITESPACE: /\s+/g,
+    FROM_SUFFIX: /\s*from\s+.*$/i,
+    PARENTHESES_CONTENT: /(\(|（|\[).*?(\)|）|\])/g,
+    MOVIE_KEYWORDS: /剧场版|the\s*movie|theatrical|movie|film|电影/gi,
+    LONE_VER_CHAR: /(\s|^)版(\s|$)/g,
+    NON_ALPHANUM_CN: /[^\u4e00-\u9fa5a-zA-Z0-9]/g,
+    META_SUFFIX: /(\(|（|\[)(续篇|TV版|无修|未删减|完整版)(\)|）|\])/gi,
+    YEAR_TAG: /(\(|（|\[)\d{4}(\)|）|\]).*$/i,
+    SUBTITLE_SEPARATOR: /^[\s:：\-–—(（\[【]/,
+    SPACE_STRUCTURE: /.+[\s\u00A0\u3000].+/,
+    SPLIT_SPACES: /[\s\u00A0\u3000]+/,
+    REDUNDANT_SEPARATOR: /[\s:：~～]/,
+    REDUNDANT_UNSAFE_END: /[\(\（\[【:：~～\-]$/,
+    REDUNDANT_VALID_CHARS: /[\u4e00-\u9fa5a-zA-Z]{2,}/
+  },
+  Episode: {
+    SUFFIX_DIGIT: /_\d+(?=$|\s)/g,
+    FILE_NOISE: /_(\d{2,4})(?=\.)/g,
+    SEASON_PREFIX: /(?:^|\s)(?:第[0-9一二三四五六七八九十]+季|S(?:eason)?\s*\d+)(?:\s+|_)/gi,
+    CLEAN_SMART: /(?:^|\s)(?:EP|E|Vol|Episode|No|Part|第)\s*\d+(?:\.\d+)?(?:\s*[话話集])?(?!\s*[季期部])/gi,
+    PUNCTUATION: /[!！?？,，.。、~～:：\-–—]/g,
+    DANDAN_TAG: /^【(dandan|animeko)】/i,
+    SPECIAL_START: /^S\d+/i,
+    MOVIE_CHECK: /剧场版|movie|film/i,
+    PV_CHECK: /(pv|trailer|预告)/i,
+    SPECIAL_CHECK: /^(s|o|sp|special)\d/i,
+    SEASON_MATCH: /(?:^|\s)(?:第|S)(\d+)[季S]/i,
+    NUM_STRATEGY_A: /(?:第|s)(\d+)[季s]\s*(?:第|ep|e)(\d+)/i,
+    NUM_STRATEGY_B: /(?:ep|e|vol|episode|chapter|no|part|第)\s*(\d+(\.\d+)?)(?:\s*[话話集])?(?!\s*[季期部])/i,
+    NUM_STRATEGY_C: /(?:^|\s)(?:第)?(\d+(\.\d+)?)(?:话|集|\s|$)/,
+    DANDAN_IGNORE: /^[SC]\d+/i,
+    MAP_EXCLUDE_KEYWORDS: /(?:^|\s)(?:PV|OP|ED|SP|Special|Drama|OAD|OVA|Opening|Ending|特番|特典|Behind\s+the\s+Scenes|Making|Interview)(?:\s|$|[:：])/i,
+    SINK_TITLE_STRICT: /^(?:S\d+|C\d+|SP\d*|OP\d*|ED\d*|PV\d*|Trailers?|Interview|Making|特番|特典)(?:\s|$|[:：.\-]|\u3000)/i
+  },
+  Category: {
+    ANIME_KW: /(动画|TV动画|动漫|日漫|国漫)/,
+    REAL_KW: /(电视剧|真人剧|综艺|纪录片)/,
+    ANIMEKO_SOURCE: /animeko/i
+  },
+  Similarity: {
+    CN_STRICT_CORE_REMOVE: /[0-9a-zA-Z\s第季集话partEPep._\-–—:：【】()（）]/gi
+  }
+};
+var SUFFIX_SPECIFIC_MAP = [
+  { regex: /(?:\s|^)A's$/i, val: "S2" },
+  { regex: /(?:\s|^)StrikerS$/i, val: "S3" },
+  { regex: /(?:\s|^)ViVid$/i, val: "S4" },
+  { regex: /(?:\s|^)SuperS$/i, val: "S4" }
+];
 var SEASON_PATTERNS = [
   { regex: /(?:第)?(\d+)(?:季|期|部(?!分))/, prefix: "S" },
   { regex: /season\s*(\d+)/, prefix: "S" },
   { regex: /s(\d+)/, prefix: "S" },
   { regex: /part\s*(\d+)/, prefix: "P" },
   { regex: /(ova|oad)/, val: "OVA" },
-  { regex: /(剧场版|movie|film|电影)/, val: "MOVIE" },
+  { regex: /(剧场版|the\s*movie|theatrical|movie|film|电影)/, val: "MOVIE" },
   { regex: /(续篇|续集)/, val: "SEQUEL" },
   { regex: /sp/, val: "SP" },
-  // 末尾数字检测：改为使用无 Part 的文本进行检测
   { regex: /[^0-9](\d)$/, prefix: "S", useCleaned: true }
 ];
-var RE_PART_ANY = /(?:part|p)\s*\d+/gi;
-var RE_SUFFIX_SPECIFIC_MAP = [
-  { regex: /(?:\s|^)A's$/i, val: "S2" },
-  { regex: /(?:\s|^)StrikerS$/i, val: "S3" },
-  { regex: /(?:\s|^)ViVid$/i, val: "S4" },
-  { regex: /(?:\s|^)SuperS$/i, val: "S4" }
-];
-var RE_SUFFIX_AMBIGUOUS = /(?:[\s\u4e00-\u9fa5]|^)(S|T|R|II|III|IV)(?=$|[\s\(\（\[【])/i;
-var RE_SUFFIX_SEQUEL = /(?:续篇|续集|The Sequel)/i;
-var RE_DANDAN_TAG = /^【(dandan|animeko)】/i;
-var RE_SPECIAL_START = /^S\d+/i;
-var RE_MOVIE_CHECK = /剧场版|movie|film/i;
-var RE_PV_CHECK = /(pv|trailer|预告)/i;
-var RE_SPECIAL_CHECK = /^(s|o|sp|special)\d/i;
-var RE_EP_SEASON_MATCH = /(?:^|\s)(?:第|S)(\d+)[季S]/i;
-var RE_EP_NUM_STRATEGY_A = /(?:第|s)(\d+)[季s].*?(?:第|ep|e)(\d+)/i;
-var RE_EP_NUM_STRATEGY_B = /(?:ep|o|s|part|第)\s*(\d+(\.\d+)?)(?!\s*[季期部])/i;
-var RE_EP_NUM_STRATEGY_C = /(?:^|\s)(\d+(\.\d+)?)(?:话|集|\s|$)/;
-var RE_ANIME_KW = /(动画|动漫|日漫|国漫)/;
-var RE_REAL_KW = /(电视剧|真人剧|综艺)/;
-var RE_ANIMEKO_SOURCE = /animeko/i;
-var RE_REDUNDANT_SEPARATOR = /[\s:：~～]/;
-var RE_REDUNDANT_UNSAFE_END = /[\(\（\[【:：~～\-]$/;
-var RE_REDUNDANT_VALID_CHARS = /[\u4e00-\u9fa5a-zA-Z]{2,}/;
-var RE_CN_STRICT_CORE_REMOVE = /[0-9a-zA-Z\s第季集话partEPep._\-–—:：【】()（）]/gi;
-var RE_SPECIAL_SINK_TITLE = /(?:^|\s)(S\d+|SP|Special|PV|OP|ED|O\d+)(?:\s|$)/i;
+var NORMALIZE_REGEX = /[\s\u3000-\u303f\uff00-\uffef]/g;
 function getLanguageType(text) {
   if (!text) return "Unspecified";
   const t = text.toLowerCase();
-  if (RE_LANG_CN.test(t)) return "CN";
-  if (RE_LANG_JP.test(t)) return "JP";
+  if (RegexStore.Lang.CN.test(t)) return "CN";
+  if (RegexStore.Lang.JP.test(t)) return "JP";
   return "Unspecified";
 }
 function cleanText(text) {
   if (!text) return "";
   let clean = simplized(text);
-  clean = clean.replace(RE_NA_TAG, "");
-  clean = clean.replace(RE_PART_NORM, "part $1");
-  clean = clean.replace(RE_PART_NORM_2, "part $1");
-  clean = clean.replace(RE_FINAL_SEASON, "\u6700\u7EC8\u5B63");
-  clean = clean.replace(RE_SEASON_NORM, "\u7B2C$1\u5B63");
+  clean = clean.replace(RegexStore.Clean.NA_TAG, "");
+  clean = clean.replace(RegexStore.Season.PART_NORM, "part $1");
+  clean = clean.replace(RegexStore.Season.PART_NORM_2, "part $1");
+  clean = clean.replace(RegexStore.Season.FINAL, "\u6700\u7EC8\u5B63");
+  clean = clean.replace(RegexStore.Season.NORM, "\u7B2C$1\u5B63");
   const cnNums = { "\u4E00": "1", "\u4E8C": "2", "\u4E09": "3", "\u56DB": "4", "\u4E94": "5", "\u516D": "6", "\u4E03": "7", "\u516B": "8", "\u4E5D": "9", "\u5341": "10" };
-  clean = clean.replace(RE_CN_SEASON, (m, num) => `\u7B2C${cnNums[num]}\u5B63`);
-  clean = clean.replace(RE_ROMAN_SEASON, (match, p1, roman, p2) => {
+  clean = clean.replace(RegexStore.Season.CN, (m, num) => `\u7B2C${cnNums[num]}\u5B63`);
+  clean = clean.replace(RegexStore.Season.ROMAN, (match, p1, roman, p2) => {
     const rMap = { "I": "1", "II": "2", "III": "3", "IV": "4" };
     return `${p1}\u7B2C${rMap[roman]}\u5B63${p2}`;
   });
-  clean = clean.replace(RE_CN_DUB_VER, "\u4E2D\u914D\u7248");
-  clean = clean.replace(RE_JP_DUB_VER, "");
-  clean = clean.replace(RE_SOURCE_TAG, "");
-  clean = clean.replace(RE_REGION_LIMIT, "");
-  clean = clean.replace(RE_PUNCTUATION, " ");
-  return clean.replace(RE_WHITESPACE, " ").toLowerCase().trim();
+  clean = clean.replace(RegexStore.Lang.CN_DUB_VER, "\u4E2D\u914D\u7248");
+  clean = clean.replace(RegexStore.Lang.JP_DUB_VER, "");
+  clean = clean.replace(RegexStore.Clean.SOURCE_TAG, "");
+  clean = clean.replace(RegexStore.Clean.REGION_LIMIT, "");
+  clean = clean.replace(/(\d+)\.(\d+)/g, "$1{{DOT}}$2");
+  clean = clean.replace(RegexStore.Clean.PUNCTUATION, " ");
+  clean = clean.replace(/{{DOT}}/g, ".");
+  return clean.replace(RegexStore.Clean.WHITESPACE, " ").toLowerCase().trim();
 }
 function cleanTitleForSimilarity(text) {
   if (!text) return "";
   let clean = simplized(text);
-  clean = clean.replace(RE_SOURCE_TAG, "");
-  clean = clean.replace(RE_FROM_SUFFIX, "");
-  clean = clean.replace(RE_NA_TAG, "");
-  clean = clean.replace(RE_PARENTHESES_CONTENT, "");
-  clean = clean.replace(RE_SEASON_INFO_STRONG, "");
-  clean = clean.replace(RE_PART_INFO_STRONG, "");
-  clean = clean.replace(RE_MOVIE_KEYWORDS, "");
-  clean = clean.replace(RE_LANG_KEYWORDS_STRONG, "");
-  clean = clean.replace(RE_LONE_VER_CHAR, "");
-  clean = clean.replace(RE_NON_ALPHANUM_CN, "");
+  const startBracketMatch = clean.match(/^(?:【|\[)(.+?)(?:】|\])/);
+  if (startBracketMatch) {
+    const content = startBracketMatch[1];
+    if (!/^(TV|剧场版|movie|film|anime|动漫|动画|AVC|HEVC|MP4|MKV)$/i.test(content)) {
+      clean = clean.replace(startBracketMatch[0], content + " ");
+    }
+  }
+  clean = clean.replace(RegexStore.Clean.SOURCE_TAG, "");
+  clean = clean.replace(RegexStore.Clean.FROM_SUFFIX, "");
+  clean = clean.replace(RegexStore.Clean.NA_TAG, "");
+  clean = clean.replace(RegexStore.Clean.PARENTHESES_CONTENT, "");
+  clean = clean.replace(RegexStore.Season.INFO_STRONG, "");
+  clean = clean.replace(RegexStore.Season.PART_INFO_STRONG, "");
+  clean = clean.replace(RegexStore.Clean.MOVIE_KEYWORDS, "");
+  clean = clean.replace(RegexStore.Lang.KEYWORDS_STRONG, "");
+  clean = clean.replace(RegexStore.Clean.LONE_VER_CHAR, "");
+  clean = clean.replace(RegexStore.Clean.NON_ALPHANUM_CN, "");
   return clean.toLowerCase();
 }
 function cleanEpisodeText(text) {
   if (!text) return "";
   let clean = simplized(text);
-  clean = clean.replace(RE_EP_SUFFIX_DIGIT, "");
-  clean = clean.replace(RE_FILE_NOISE, "");
-  clean = clean.replace(RE_EP_SEASON_PREFIX, " ");
-  clean = clean.replace(RE_SOURCE_TAG, "");
-  clean = clean.replace(RE_LANG_CN_STD, "\u4E2D\u6587");
-  clean = clean.replace(RE_LANG_JP_STD, "\u65E5\u6587");
-  clean = clean.replace(RE_EP_PUNCTUATION, " ");
-  return clean.replace(RE_WHITESPACE, " ").toLowerCase().trim();
+  clean = clean.replace(RegexStore.Episode.SUFFIX_DIGIT, "");
+  clean = clean.replace(RegexStore.Episode.FILE_NOISE, "");
+  clean = clean.replace(RegexStore.Episode.SEASON_PREFIX, " ");
+  clean = clean.replace(RegexStore.Episode.CLEAN_SMART, " ");
+  clean = clean.replace(RegexStore.Clean.SOURCE_TAG, "");
+  clean = clean.replace(RegexStore.Lang.CN_STD, "\u4E2D\u6587");
+  clean = clean.replace(RegexStore.Lang.JP_STD, "\u65E5\u6587");
+  clean = clean.replace(/(\d+)\.(\d+)/g, "$1{{DOT}}$2");
+  clean = clean.replace(RegexStore.Episode.PUNCTUATION, " ");
+  clean = clean.replace(/{{DOT}}/g, ".");
+  return clean.replace(RegexStore.Clean.WHITESPACE, " ").toLowerCase().trim();
 }
 function removeParentheses(text) {
   if (!text) return "";
-  return text.replace(RE_PARENTHESES_CONTENT, "").trim();
+  return text.replace(RegexStore.Clean.PARENTHESES_CONTENT, "").trim();
 }
 function sanitizeUrl(urlStr) {
   if (!urlStr) return "";
   let clean = String(urlStr).split(MERGE_DELIMITER)[0].trim();
-  if (clean.startsWith("//")) {
-    return "https:" + clean;
-  }
+  if (clean.startsWith("//")) return "https:" + clean;
   const match = clean.match(/^([^:]+):(.+)$/);
   if (match) {
     const prefix = match[1].toLowerCase();
     const body = match[2];
-    if (prefix === "http" || prefix === "https") {
-      return clean;
-    }
-    if (/^https?:\/\//i.test(body)) {
-      return body;
-    }
-    if (body.startsWith("//")) {
-      return "https:" + body;
-    }
+    if (prefix === "http" || prefix === "https") return clean;
+    if (/^https?:\/\//i.test(body)) return body;
+    if (body.startsWith("//")) return "https:" + body;
     return body;
   }
   return clean;
@@ -4019,34 +4242,21 @@ function parseDate(dateStr) {
   if (isNaN(time)) return { year: null, month: null };
   const year = d.getFullYear();
   if (year > 2030) return { year: null, month: null };
-  return {
-    year,
-    month: d.getMonth() + 1
-  };
+  return { year, month: d.getMonth() + 1 };
 }
 function editDistance(s1, s2) {
-  const len1 = s1.length;
-  const len2 = s2.length;
+  const len1 = s1.length, len2 = s2.length;
   if (len1 === 0) return len2;
   if (len2 === 0) return len1;
   let prevRow = new Array(len2 + 1);
   let currRow = new Array(len2 + 1);
-  for (let j = 0; j <= len2; j++) {
-    prevRow[j] = j;
-  }
+  for (let j = 0; j <= len2; j++) prevRow[j] = j;
   for (let i = 1; i <= len1; i++) {
     currRow[0] = i;
     const char1 = s1.charCodeAt(i - 1);
     for (let j = 1; j <= len2; j++) {
       const cost = char1 === s2.charCodeAt(j - 1) ? 0 : 1;
-      currRow[j] = Math.min(
-        currRow[j - 1] + 1,
-        // insertion
-        prevRow[j] + 1,
-        // deletion
-        prevRow[j - 1] + cost
-        // substitution
-      );
+      currRow[j] = Math.min(currRow[j - 1] + 1, prevRow[j] + 1, prevRow[j - 1] + cost);
     }
     const temp = prevRow;
     prevRow = currRow;
@@ -4056,19 +4266,14 @@ function editDistance(s1, s2) {
 }
 function calculateDiceSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
-  const set1 = new Set(s1.replace(RE_WHITESPACE, ""));
-  const set2 = new Set(s2.replace(RE_WHITESPACE, ""));
-  const size1 = set1.size;
-  const size2 = set2.size;
+  const set1 = new Set(s1.replace(RegexStore.Clean.WHITESPACE, ""));
+  const set2 = new Set(s2.replace(RegexStore.Clean.WHITESPACE, ""));
+  const size1 = set1.size, size2 = set2.size;
   if (size1 === 0 && size2 === 0) return 1;
   if (size1 === 0 || size2 === 0) return 0;
   let intersection = 0;
   const [smaller, larger] = size1 < size2 ? [set1, set2] : [set2, set1];
-  for (const char of smaller) {
-    if (larger.has(char)) {
-      intersection++;
-    }
-  }
+  for (const char of smaller) if (larger.has(char)) intersection++;
   return 2 * intersection / (size1 + size2);
 }
 function calculateSimilarity(str1, str2) {
@@ -4076,28 +4281,21 @@ function calculateSimilarity(str1, str2) {
   const s1 = cleanTitleForSimilarity(str1);
   const s2 = cleanTitleForSimilarity(str2);
   if (s1 === s2) return 1;
-  const len1 = s1.length;
-  const len2 = s2.length;
-  const maxLen = Math.max(len1, len2);
-  const minLen = Math.min(len1, len2);
+  const len1 = s1.length, len2 = s2.length;
+  const maxLen = Math.max(len1, len2), minLen = Math.min(len1, len2);
   if (s1.includes(s2) || s2.includes(s1)) {
     const lenRatio = minLen / maxLen;
-    if (lenRatio > 0.5) {
-      return 0.8 + lenRatio * 0.2;
-    }
+    if (lenRatio > 0.5) return 0.8 + lenRatio * 0.2;
   }
   const distance = editDistance(s1, s2);
   const editScore = maxLen === 0 ? 1 : 1 - distance / maxLen;
-  const set1 = new Set(s1.replace(RE_WHITESPACE, ""));
-  const set2 = new Set(s2.replace(RE_WHITESPACE, ""));
-  const size1 = set1.size;
-  const size2 = set2.size;
+  const set1 = new Set(s1.replace(RegexStore.Clean.WHITESPACE, ""));
+  const set2 = new Set(s2.replace(RegexStore.Clean.WHITESPACE, ""));
+  const size1 = set1.size, size2 = set2.size;
   if (size1 === 0 || size2 === 0) return 0;
   let intersection = 0;
   const [smallerSet, largerSet] = size1 < size2 ? [set1, set2] : [set2, set1];
-  for (const char of smallerSet) {
-    if (largerSet.has(char)) intersection++;
-  }
+  for (const char of smallerSet) if (largerSet.has(char)) intersection++;
   const diceScore = 2 * intersection / (size1 + size2);
   let overlapScore = 0;
   const minSize = Math.min(size1, size2);
@@ -4105,30 +4303,21 @@ function calculateSimilarity(str1, str2) {
     overlapScore = intersection / minSize;
     if (overlapScore > 0.6) {
       const sizeRatio = minSize / Math.max(size1, size2);
-      if (sizeRatio < 0.6) {
-        overlapScore -= 0.25;
-      }
+      if (sizeRatio < 0.6) overlapScore -= 0.25;
     }
   }
   return Math.max(editScore, diceScore, overlapScore);
 }
 function checkTitleSubtitleConflict(titleA, titleB, isDateValid = true) {
   if (!titleA || !titleB) return false;
-  if (cleanTitleForSimilarity(titleA) === cleanTitleForSimilarity(titleB)) {
-    return false;
-  }
+  if (cleanTitleForSimilarity(titleA) === cleanTitleForSimilarity(titleB)) return false;
   const lightClean = (str) => {
     if (!str) return "";
     let s = simplized(str);
-    s = s.replace(RE_META_SUFFIX, "");
-    s = s.replace(RE_YEAR_TAG, "");
-    s = s.replace(RE_SOURCE_TAG, "");
-    s = s.replace(RE_FROM_SUFFIX, "");
-    s = s.replace(RE_WHITESPACE, " ");
+    s = s.replace(RegexStore.Clean.META_SUFFIX, "").replace(RegexStore.Clean.YEAR_TAG, "").replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").replace(RegexStore.Clean.WHITESPACE, " ");
     return s.trim().toLowerCase();
   };
-  const t1 = lightClean(titleA);
-  const t2 = lightClean(titleB);
+  const t1 = lightClean(titleA), t2 = lightClean(titleB);
   if (t1 === t2) return false;
   const extractSubtitle = (fullTitle) => {
     const splitters = [":", "\uFF1A", " code:", " code\uFF1A", " season", " part"];
@@ -4136,33 +4325,24 @@ function checkTitleSubtitleConflict(titleA, titleB, isDateValid = true) {
       const idx = fullTitle.indexOf(sep);
       if (idx !== -1) return fullTitle.substring(idx).trim();
     }
-    const spaceParts = fullTitle.split(RE_WHITESPACE);
-    if (spaceParts.length >= 2) {
-      return spaceParts.slice(1).join(" ");
-    }
+    const spaceParts = fullTitle.split(RegexStore.Clean.WHITESPACE);
+    if (spaceParts.length >= 2) return spaceParts.slice(1).join(" ");
     return null;
   };
-  const sub1 = extractSubtitle(t1);
-  const sub2 = extractSubtitle(t2);
+  const sub1 = extractSubtitle(t1), sub2 = extractSubtitle(t2);
   const [short, long] = t1.length < t2.length ? [t1, t2] : [t2, t1];
   if (long.startsWith(short)) {
     if (long.length === short.length) return false;
     const nextChar = long[short.length];
-    if (RE_SUBTITLE_SEPARATOR.test(nextChar)) {
-      const subtitle = long.slice(short.length).replace(RE_SUBTITLE_SEPARATOR, "").trim();
-      if (!isDateValid && subtitle.length > 1) {
-        return true;
-      }
-      if (subtitle.length > 2) {
-        return true;
-      }
+    if (RegexStore.Clean.SUBTITLE_SEPARATOR.test(nextChar)) {
+      const subtitle = long.slice(short.length).replace(RegexStore.Clean.SUBTITLE_SEPARATOR, "").trim();
+      if (!isDateValid && subtitle.length > 1) return true;
+      if (subtitle.length > 2) return true;
     }
   }
   if (sub1 && sub2) {
     const sim = calculateDiceSimilarity(sub1, sub2);
-    if (sim < 0.2) {
-      return true;
-    }
+    if (sim < 0.2) return true;
   }
   return false;
 }
@@ -4170,20 +4350,24 @@ function extractSeasonMarkers(title, typeDesc = "") {
   const markers = /* @__PURE__ */ new Set();
   const t = cleanText(title);
   const type = cleanText(typeDesc || "");
-  const tWithoutParts = t.replace(RE_PART_ANY, "");
+  const tWithoutParts = t.replace(RegexStore.Season.PART_ANY, "");
+  const structMatch = tWithoutParts.match(RegexStore.Season.CN_STRUCTURE);
+  if (structMatch) {
+    const char = structMatch[1];
+    if (char === "\u627F") markers.add("S2");
+    else if (char === "\u8F6C") markers.add("S3");
+    else if (char === "\u7ED3") markers.add("S4");
+  }
   SEASON_PATTERNS.forEach((p) => {
     const targetText = p.useCleaned ? tWithoutParts : t;
     const match = targetText.match(p.regex);
     if (match) {
-      if (p.prefix) {
-        markers.add(`${p.prefix}${parseInt(match[1])}`);
-      } else {
-        markers.add(p.val);
-      }
+      if (p.prefix) markers.add(`${p.prefix}${parseInt(match[1])}`);
+      else markers.add(p.val);
     }
   });
   let hitSpecific = false;
-  for (const item of RE_SUFFIX_SPECIFIC_MAP) {
+  for (const item of SUFFIX_SPECIFIC_MAP) {
     if (item.regex.test(tWithoutParts)) {
       markers.add(item.val);
       hitSpecific = true;
@@ -4191,7 +4375,7 @@ function extractSeasonMarkers(title, typeDesc = "") {
     }
   }
   if (!hitSpecific) {
-    const ambMatch = tWithoutParts.match(RE_SUFFIX_AMBIGUOUS);
+    const ambMatch = tWithoutParts.match(RegexStore.Season.SUFFIX_AMBIGUOUS);
     if (ambMatch) {
       markers.add("AMBIGUOUS");
       const suffix = ambMatch[1].toUpperCase();
@@ -4200,9 +4384,7 @@ function extractSeasonMarkers(title, typeDesc = "") {
       if (suffix === "IV") markers.add("S4");
     }
   }
-  if (RE_SUFFIX_SEQUEL.test(t) || type.includes("\u7EED\u7BC7")) {
-    markers.add("SEQUEL");
-  }
+  if (RegexStore.Season.SUFFIX_SEQUEL.test(t) || type.includes("\u7EED\u7BC7")) markers.add("SEQUEL");
   if (type.includes("\u5267\u573A\u7248") || type.includes("movie") || type.includes("film") || type.includes("\u7535\u5F71")) markers.add("MOVIE");
   if (type.includes("ova") || type.includes("oad")) markers.add("OVA");
   if (type.includes("sp") || type.includes("special")) markers.add("SP");
@@ -4214,14 +4396,23 @@ function extractSeasonMarkers(title, typeDesc = "") {
   const hasPart = Array.from(markers).some((m) => m.startsWith("P"));
   const hasAmbiguous = markers.has("AMBIGUOUS");
   const hasSequel = markers.has("SEQUEL");
-  if (hasPart && !hasSeason) {
-    markers.add("S1");
-  }
   const isTypeSpecial = markers.has("MOVIE") || markers.has("OVA") || markers.has("SP");
-  if (!hasSeason && !hasPart && !hasAmbiguous && !hasSequel && !isTypeSpecial) {
-    markers.add("S1");
-  }
+  if (hasPart && !hasSeason) markers.add("S1");
+  if (!hasSeason && !hasPart && !hasAmbiguous && !hasSequel && !isTypeSpecial) markers.add("S1");
   return markers;
+}
+function getSeasonNumber(title, typeDesc = "") {
+  const markers = extractSeasonMarkers(title, typeDesc);
+  let maxSeason = null;
+  for (const m of markers) {
+    if (m.startsWith("S")) {
+      const num = parseInt(m.substring(1));
+      if (!isNaN(num)) {
+        if (maxSeason === null || num > maxSeason) maxSeason = num;
+      }
+    }
+  }
+  return maxSeason;
 }
 function getStrictMediaType(title, typeDesc) {
   const fullText = (title + " " + (typeDesc || "")).toLowerCase();
@@ -4232,12 +4423,10 @@ function getStrictMediaType(title, typeDesc) {
   return null;
 }
 function getContentCategory(title, typeDesc, source) {
-  if (source && RE_ANIMEKO_SOURCE.test(source)) {
-    return "ANIME";
-  }
+  if (source && RegexStore.Category.ANIMEKO_SOURCE.test(source)) return "ANIME";
   const fullText = (title + " " + (typeDesc || "")).toLowerCase();
-  if (RE_ANIME_KW.test(fullText)) return "ANIME";
-  if (RE_REAL_KW.test(fullText)) return "REAL";
+  if (RegexStore.Category.ANIME_KW.test(fullText)) return "ANIME";
+  if (RegexStore.Category.REAL_KW.test(fullText)) return "REAL";
   return "UNKNOWN";
 }
 function checkTheatricalExemption(titleA, titleB, typeDescA, typeDescB) {
@@ -4245,24 +4434,17 @@ function checkTheatricalExemption(titleA, titleB, typeDescA, typeDescB) {
   if (!isTheatrical) return false;
   const lightClean = (str) => {
     if (!str) return "";
-    let s = simplized(str);
-    s = s.replace(RE_YEAR_TAG, "");
-    s = s.replace(RE_SOURCE_TAG, "");
-    s = s.replace(RE_FROM_SUFFIX, "");
+    let s = simplized(str).replace(RegexStore.Clean.YEAR_TAG, "").replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "");
     return s.trim();
   };
-  const t1 = lightClean(titleA);
-  const t2 = lightClean(titleB);
-  if (RE_SPACE_STRUCTURE.test(t1) && RE_SPACE_STRUCTURE.test(t2)) {
+  const t1 = lightClean(titleA), t2 = lightClean(titleB);
+  if (RegexStore.Clean.SPACE_STRUCTURE.test(t1) && RegexStore.Clean.SPACE_STRUCTURE.test(t2)) {
     const extractSub = (s) => {
-      const parts = s.split(RE_SPLIT_SPACES);
+      const parts = s.split(RegexStore.Clean.SPLIT_SPACES);
       return parts.length > 1 ? parts.slice(1).join(" ") : "";
     };
-    const sub1 = extractSub(t1);
-    const sub2 = extractSub(t2);
-    if (REGEX_PURE_SEASON_PART.test(sub1) || REGEX_PURE_SEASON_PART.test(sub2)) {
-      return false;
-    }
+    const sub1 = extractSub(t1), sub2 = extractSub(t2);
+    if (RegexStore.Season.PURE_PART.test(sub1) || RegexStore.Season.PURE_PART.test(sub2)) return false;
     return true;
   }
   return false;
@@ -4270,21 +4452,15 @@ function checkTheatricalExemption(titleA, titleB, typeDescA, typeDescB) {
 function checkMediaTypeMismatch(titleA, titleB, typeDescA, typeDescB, countA, countB, sourceA = "", sourceB = "") {
   const catA = getContentCategory(titleA, typeDescA, sourceA);
   const catB = getContentCategory(titleB, typeDescB, sourceB);
-  if (catA === "REAL" && catB === "ANIME" || catA === "ANIME" && catB === "REAL") {
-    return true;
-  }
+  if (catA === "REAL" && catB === "ANIME" || catA === "ANIME" && catB === "REAL") return true;
   const mediaA = getStrictMediaType(titleA, typeDescA);
   const mediaB = getStrictMediaType(titleB, typeDescB);
   if (!mediaA || !mediaB || mediaA === mediaB) return false;
-  if (checkTheatricalExemption(titleA, titleB, typeDescA, typeDescB)) {
-    return false;
-  }
+  if (checkTheatricalExemption(titleA, titleB, typeDescA, typeDescB)) return false;
   const hasValidCounts = countA > 0 && countB > 0;
   if (hasValidCounts) {
     const diff = Math.abs(countA - countB);
-    if (diff > 5) {
-      return true;
-    }
+    if (diff > 5) return true;
     return false;
   }
   return true;
@@ -4296,28 +4472,22 @@ function checkSeasonMismatch(titleA, titleB, typeA, typeB) {
   const hasS2OrMore = (set) => Array.from(set).some((m) => m.startsWith("S") && parseInt(m.substring(1)) >= 2);
   const hasSequel = (set) => set.has("SEQUEL");
   const hasAmbiguous = (set) => set.has("AMBIGUOUS");
+  const hasS1 = (set) => set.has("S1");
   if (markersA.size > 0 && markersB.size > 0) {
-    if (hasAmbiguous(markersA) && (hasS2OrMore(markersB) || markersB.has("S1") || hasSequel(markersB)) || hasAmbiguous(markersB) && (hasS2OrMore(markersA) || markersA.has("S1") || hasSequel(markersA))) {
-      return false;
-    }
-    if (hasS2OrMore(markersA) && hasSequel(markersB) || hasS2OrMore(markersB) && hasSequel(markersA)) {
-      return false;
-    }
+    if (hasAmbiguous(markersA) && hasS1(markersB) || hasAmbiguous(markersB) && hasS1(markersA)) return true;
+    if (hasAmbiguous(markersA) && (hasS2OrMore(markersB) || hasSequel(markersB)) || hasAmbiguous(markersB) && (hasS2OrMore(markersA) || hasSequel(markersA))) return false;
+    if (hasS2OrMore(markersA) && hasSequel(markersB) || hasS2OrMore(markersB) && hasSequel(markersA)) return false;
     for (const m of markersA) {
       if (m.startsWith("S")) {
         const hasSameS = markersB.has(m);
         const bHasAnyS = Array.from(markersB).some((b) => b.startsWith("S"));
-        if (!hasSameS && bHasAnyS) {
-          return true;
-        }
+        if (!hasSameS && bHasAnyS) return true;
       }
     }
     return false;
   }
   if (markersA.size !== markersB.size) {
-    if (checkTheatricalExemption(titleA, titleB, typeA, typeB)) {
-      return false;
-    }
+    if (checkTheatricalExemption(titleA, titleB, typeA, typeB)) return false;
     return true;
   }
   return false;
@@ -4327,9 +4497,7 @@ function hasSameSeasonMarker(titleA, titleB, typeA, typeB) {
   const markersB = extractSeasonMarkers(titleB, typeB);
   const seasonsA = Array.from(markersA).filter((m) => m.startsWith("S"));
   const seasonsB = Array.from(markersB).filter((m) => m.startsWith("S"));
-  if (seasonsA.length > 0 && seasonsB.length > 0) {
-    return seasonsA.some((sa) => seasonsB.includes(sa));
-  }
+  if (seasonsA.length > 0 && seasonsB.length > 0) return seasonsA.some((sa) => seasonsB.includes(sa));
   return false;
 }
 function checkDateMatch(dateA, dateB, isDub = false) {
@@ -4344,24 +4512,22 @@ function checkDateMatch(dateA, dateB, isDub = false) {
     return 0.1;
   }
   const absDiff = Math.abs(yearDiff);
-  if (isDub) {
-    if (absDiff <= 10) {
-      return 0;
-    }
-  }
+  if (isDub && absDiff <= 10) return 0;
   if (absDiff > 1) return -1;
   return 0;
 }
-function isMergeRatioValid(mergedCount, totalA, totalB, sourceA, sourceB) {
-  if (sourceA === "animeko" || sourceB === "animeko") {
+function isMergeRatioValid(mergedCount, totalA, totalB, sourceA, sourceB, isAnyCollection = false) {
+  if (sourceA === "animeko" || sourceB === "animeko") return true;
+  if (isAnyCollection) {
+    const minTotal = Math.min(totalA, totalB);
+    if (minTotal > 0 && mergedCount / minTotal > 0.5) return true;
+    if (mergedCount < 2) return false;
     return true;
   }
   const maxTotal = Math.max(totalA, totalB);
   if (maxTotal === 0) return false;
   const ratio = mergedCount / maxTotal;
-  if (maxTotal > 5 && ratio < 0.18) {
-    return false;
-  }
+  if (maxTotal > 5 && ratio < 0.18) return false;
   return true;
 }
 function detectPeerContextSequels(secondaryList) {
@@ -4369,13 +4535,13 @@ function detectPeerContextSequels(secondaryList) {
   if (!secondaryList || secondaryList.length < 2) return contextMap;
   const items = secondaryList.map((item) => {
     const raw = item.animeTitle || "";
-    const clean = cleanText(raw).replace(RE_SOURCE_TAG, "").replace(RE_FROM_SUFFIX, "").trim();
+    const clean = cleanText(raw).replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").trim();
     return { id: item.animeId, raw, clean };
   });
   const baseTitles = new Set(items.map((i) => i.clean));
   for (const item of items) {
     let baseCandidate = null;
-    for (const mapItem of RE_SUFFIX_SPECIFIC_MAP) {
+    for (const mapItem of SUFFIX_SPECIFIC_MAP) {
       const m = item.clean.match(mapItem.regex);
       if (m) {
         baseCandidate = item.clean.replace(mapItem.regex, "").trim();
@@ -4383,19 +4549,15 @@ function detectPeerContextSequels(secondaryList) {
       }
     }
     if (!baseCandidate) {
-      const m = item.clean.match(RE_SUFFIX_AMBIGUOUS);
+      const m = item.clean.match(RegexStore.Season.SUFFIX_AMBIGUOUS);
       if (m) {
         const suffix = m[1];
-        if (item.clean.endsWith(suffix)) {
-          baseCandidate = item.clean.substring(0, item.clean.length - suffix.length).trim();
-        }
+        if (item.clean.endsWith(suffix)) baseCandidate = item.clean.substring(0, item.clean.length - suffix.length).trim();
       }
     }
-    if (baseCandidate) {
-      if (baseCandidate.length > 1 && baseTitles.has(baseCandidate)) {
-        contextMap.set(String(item.id), baseCandidate);
-        log2("info", `[Merge-Check] \u4E0A\u4E0B\u6587\u611F\u77E5: \u5224\u5B9A [${item.raw}] \u4E3A\u7EED\u4F5C (Base: "${baseCandidate}" \u540C\u65F6\u4E5F\u5B58\u5728\u4E8E\u5217\u8868)`);
-      }
+    if (baseCandidate && baseCandidate.length > 1 && baseTitles.has(baseCandidate)) {
+      contextMap.set(String(item.id), baseCandidate);
+      log2("info", `[Merge-Check] \u4E0A\u4E0B\u6587\u611F\u77E5: \u5224\u5B9A [${item.raw}] \u4E3A\u7EED\u4F5C (Base: "${baseCandidate}" \u540C\u65F6\u4E5F\u5B58\u5728\u4E8E\u5217\u8868)`);
     }
   }
   return contextMap;
@@ -4404,12 +4566,10 @@ function probeContentMatch(primaryAnime, candidateAnime) {
   const result = { isStrongMatch: false, isStrongMismatch: false };
   if (!primaryAnime.links || !candidateAnime.links) return result;
   if (primaryAnime.links.length === 0 || candidateAnime.links.length === 0) return result;
-  const countEpisodes = (links) => {
-    return links.filter((l) => {
-      const t = (l.title || l.name || "").toLowerCase();
-      return !RE_PV_CHECK.test(t) && !RE_SPECIAL_CHECK.test(t);
-    }).length;
-  };
+  const countEpisodes = (links) => links.filter((l) => {
+    const t = (l.title || l.name || "").toLowerCase();
+    return !RegexStore.Episode.PV_CHECK.test(t) && !RegexStore.Episode.SPECIAL_CHECK.test(t);
+  }).length;
   const countP = countEpisodes(primaryAnime.links);
   const countS = countEpisodes(candidateAnime.links);
   if (countP > 5 && countS > 5) {
@@ -4428,18 +4588,13 @@ function probeContentMatch(primaryAnime, candidateAnime) {
   const langS = getLanguageType(titlesS.join(" "));
   if (langP !== langS || langP === "Unspecified") return result;
   const sampleSize = Math.min(titlesP.length, titlesS.length, 5);
-  let matchHits = 0;
-  let mismatchHits = 0;
+  let matchHits = 0, mismatchHits = 0;
   let logSamples = [];
   for (let i = 0; i < sampleSize; i++) {
     const idxP = Math.floor(i * titlesP.length / sampleSize);
     const idxS = Math.floor(i * titlesS.length / sampleSize);
-    const tp = titlesP[idxP];
-    const ts = titlesS[idxS];
-    const sim = calculateSimilarity(tp, ts);
-    if (i < 3) {
-      logSamples.push(`"${tp}" vs "${ts}" (${sim.toFixed(2)})`);
-    }
+    const sim = calculateSimilarity(titlesP[idxP], titlesS[idxS]);
+    if (i < 3) logSamples.push(`"${titlesP[idxP]}" vs "${titlesS[idxS]}" (${sim.toFixed(2)})`);
     if (sim > 0.6) matchHits++;
     else if (sim < 0.3) mismatchHits++;
   }
@@ -4452,30 +4607,40 @@ function probeContentMatch(primaryAnime, candidateAnime) {
   }
   return result;
 }
-function findSecondaryMatches(primaryAnime, secondaryList) {
+function findSecondaryMatches(primaryAnime, secondaryList, collectionAnimeIds = /* @__PURE__ */ new Set()) {
   if (!secondaryList || secondaryList.length === 0) return [];
   const rawPrimaryTitle = primaryAnime.animeTitle || "";
-  let primaryTitleForSim = rawPrimaryTitle.replace(RE_YEAR_TAG, "");
-  primaryTitleForSim = primaryTitleForSim.replace(/【(电影|电视剧)】/g, "").trim();
-  const isPrimaryDub = !!primaryTitleForSim.match(RE_CN_DUB_VER) || RE_LANG_CN.test(primaryTitleForSim);
-  const primaryDate = rawPrimaryTitle.includes("N/A") ? { year: null, month: null } : parseDate(primaryAnime.startDate);
+  const primaryTitleForSim = rawPrimaryTitle.replace(RegexStore.Clean.YEAR_TAG, "").replace(/【(电影|电视剧)】/g, "").trim();
+  const isPrimaryDub = !!primaryTitleForSim.match(RegexStore.Lang.CN_DUB_VER) || RegexStore.Lang.CN.test(primaryTitleForSim);
+  const isPrimaryIgnoredYear = primaryAnime.source === "hanjutv";
+  const primaryDate = rawPrimaryTitle.includes("N/A") || isPrimaryIgnoredYear ? { year: null, month: null } : parseDate(primaryAnime.startDate);
   const primaryCount = primaryAnime.episodeCount || (primaryAnime.links ? primaryAnime.links.length : 0);
   const primaryLang = getLanguageType(rawPrimaryTitle);
-  let validCandidates = [];
-  let maxScore = 0;
-  const logReason = (secTitle, reason) => {
-    log2("info", `[Merge-Check] \u62D2\u7EDD: [${primaryAnime.source}] ${rawPrimaryTitle} vs [${secTitle}] -> ${reason}`);
-  };
   const primaryCleanForZhi = cleanText(primaryTitleForSim);
   const cleanPrimarySim = cleanTitleForSimilarity(primaryTitleForSim);
   const baseA = removeParentheses(primaryTitleForSim);
-  const ambiguousSequelsMap = detectPeerContextSequels(secondaryList);
+  const markersP = extractSeasonMarkers(rawPrimaryTitle, primaryAnime.typeDescription);
+  const seasonsP = Array.from(markersP).filter((m) => m.startsWith("S"));
+  const combinedForContext = [{ animeId: primaryAnime.animeId, animeTitle: rawPrimaryTitle }, ...secondaryList];
+  const ambiguousSequelsMap = detectPeerContextSequels(combinedForContext);
+  const isPrimaryContextSequel = ambiguousSequelsMap.has(String(primaryAnime.animeId));
+  const primaryBaseTitleFromContext = ambiguousSequelsMap.get(String(primaryAnime.animeId));
+  const isPrimaryCollection = collectionAnimeIds.has(primaryAnime.animeId);
+  const logReason = (secTitle, reason) => {
+    log2("info", `[Merge-Check] \u62D2\u7EDD: [${primaryAnime.source}] ${rawPrimaryTitle} vs [${secTitle}] -> ${reason}`);
+  };
+  let validCandidates = [];
+  let maxScore = 0;
   for (const secAnime of secondaryList) {
     const rawSecTitle = secAnime.animeTitle || "";
-    const secDate = rawSecTitle.includes("N/A") ? { year: null, month: null } : parseDate(secAnime.startDate);
+    const isSecCollection = collectionAnimeIds.has(secAnime.animeId);
+    const isAnyCollection = isPrimaryCollection || isSecCollection;
+    const isSecIgnoredYear = secAnime.source === "hanjutv";
+    const secDate = rawSecTitle.includes("N/A") || isSecIgnoredYear ? { year: null, month: null } : parseDate(secAnime.startDate);
     const secLang = getLanguageType(rawSecTitle);
-    let secTitleForSim = rawSecTitle.replace(RE_YEAR_TAG, "");
-    secTitleForSim = secTitleForSim.replace(/【(电影|电视剧)】/g, "").trim();
+    const secTitleForSim = rawSecTitle.replace(RegexStore.Clean.YEAR_TAG, "").replace(/【(电影|电视剧)】/g, "").trim();
+    const isSecDub = !!secTitleForSim.match(RegexStore.Lang.CN_DUB_VER) || RegexStore.Lang.CN.test(secTitleForSim);
+    const isDubRelation = isPrimaryDub || isSecDub;
     const secCount = secAnime.episodeCount || (secAnime.links ? secAnime.links.length : 0);
     if (secTitleForSim.includes("\u4E4B")) {
       const parts = secTitleForSim.split("\u4E4B");
@@ -4497,153 +4662,120 @@ function findSecondaryMatches(primaryAnime, secondaryList) {
     if (isAmbiguousSequel) {
       const baseTitleOfSec = ambiguousSequelsMap.get(String(secAnime.animeId));
       if (cleanPrimarySim === cleanTitleForSimilarity(baseTitleOfSec)) {
-        const primaryHasSuffix = RE_SUFFIX_AMBIGUOUS.test(primaryCleanForZhi) || RE_SUFFIX_SPECIFIC_MAP.some((x) => x.regex.test(primaryCleanForZhi));
+        const primaryHasSuffix = RegexStore.Season.SUFFIX_AMBIGUOUS.test(primaryCleanForZhi) || SUFFIX_SPECIFIC_MAP.some((x) => x.regex.test(primaryCleanForZhi));
         if (!primaryHasSuffix) {
           logReason(rawSecTitle, `\u4E0A\u4E0B\u6587\u963B\u65AD: \u4E3B\u6E90(S1) vs \u526F\u6E90(S2/S\u7EED\u4F5C) (Base: "${baseTitleOfSec}")`);
           continue;
         }
       }
     }
+    if (isPrimaryContextSequel) {
+      if (cleanTitleForSimilarity(secTitleForSim) === cleanTitleForSimilarity(primaryBaseTitleFromContext)) {
+        logReason(rawSecTitle, `\u4E0A\u4E0B\u6587\u963B\u65AD: \u4E3B\u6E90(S2/Sequel) vs \u526F\u6E90(Base/S1) (Base: "${primaryBaseTitleFromContext}")`);
+        continue;
+      }
+    }
     if (!isDateValid && hasStructureConflict) {
-      logReason(rawSecTitle, `\u6807\u9898\u7ED3\u6784\u51B2\u7A81\u4E14\u65E5\u671F\u65E0\u6548 (HasConflict=true, DateValid=false)`);
+      logReason(rawSecTitle, `\u6807\u9898\u7ED3\u6784\u51B2\u7A81\u4E14\u65E5\u671F\u65E0\u6548`);
       continue;
     }
     const isSeasonExactMatch = hasSameSeasonMarker(primaryTitleForSim, secTitleForSim, primaryAnime.typeDescription, secAnime.typeDescription);
     const contentProbe = probeContentMatch(primaryAnime, secAnime);
-    const dateScore = checkDateMatch(primaryDate, secDate, isPrimaryDub);
+    const hasMovieA = rawPrimaryTitle.search(RegexStore.Clean.MOVIE_KEYWORDS) !== -1;
+    const hasMovieB = rawSecTitle.search(RegexStore.Clean.MOVIE_KEYWORDS) !== -1;
+    if (hasMovieA !== hasMovieB) {
+      const markersA = markersP;
+      const markersB = extractSeasonMarkers(rawSecTitle, secAnime.typeDescription);
+      const stripMovie = (t) => cleanTitleForSimilarity(t.replace(RegexStore.Clean.MOVIE_KEYWORDS, ""));
+      const cleanA = stripMovie(rawPrimaryTitle);
+      const cleanB = stripMovie(rawSecTitle);
+      if (calculateSimilarity(cleanA, cleanB) > 0.9) {
+        if (!markersA.has("SEQUEL") && !markersB.has("SEQUEL")) {
+          logReason(rawSecTitle, `\u5267\u573A\u7248\u6807\u9898\u963B\u65AD: [${hasMovieA ? "Movie" : "TV"}] vs [${hasMovieB ? "Movie" : "TV"}] (\u65E0\u7EED\u7BC7\u6807\u8BC6)`);
+          continue;
+        }
+      }
+    }
+    const dateScore = isAnyCollection ? 0 : checkDateMatch(primaryDate, secDate, isDubRelation);
     if (dateScore === -1) {
       let allowExemption = isSeasonExactMatch;
       if (contentProbe.isStrongMatch) allowExemption = true;
-      if (hasStructureConflict) {
-        allowExemption = false;
-      }
+      if (isAnyCollection) allowExemption = true;
+      if (hasStructureConflict && !isAnyCollection) allowExemption = false;
       if (allowExemption && primaryDate.year && secDate.year) {
         const yearDiff = Math.abs(primaryDate.year - secDate.year);
-        if (yearDiff > 2 && !contentProbe.isStrongMatch) {
-          allowExemption = false;
-        }
+        if (yearDiff > 2 && !contentProbe.isStrongMatch && !isAnyCollection) allowExemption = false;
       }
       if (!allowExemption) {
-        logReason(rawSecTitle, `\u65E5\u671F\u4E25\u91CD\u4E0D\u5339\u914D\u4E14\u65E0\u8C41\u514D (P:${primaryDate.year} vs S:${secDate.year}, IsDub:${isPrimaryDub}, StrongProbe:${contentProbe.isStrongMatch})`);
+        logReason(rawSecTitle, `\u65E5\u671F\u4E25\u91CD\u4E0D\u5339\u914D\u4E14\u65E0\u8C41\u514D (P:${primaryDate.year} vs S:${secDate.year}, IsDub:${isDubRelation})`);
         continue;
       }
     }
-    if (checkSeasonMismatch(primaryTitleForSim, secTitleForSim, primaryAnime.typeDescription, secAnime.typeDescription)) {
+    if (!isAnyCollection && checkSeasonMismatch(primaryTitleForSim, secTitleForSim, primaryAnime.typeDescription, secAnime.typeDescription)) {
       if (contentProbe.isStrongMatch) {
-        log2("info", `[Merge-Check] \u5B63\u5EA6\u51B2\u7A81\u8C41\u514D: [${rawPrimaryTitle}] vs [${rawSecTitle}] (\u68C0\u6D4B\u5230\u96C6\u5185\u5BB9\u5F3A\u5339\u914D\uFF0C\u65E0\u89C6\u6807\u9898\u5B63\u5EA6\u5DEE\u5F02)`);
+        log2("info", `[Merge-Check] \u5B63\u5EA6\u51B2\u7A81\u8C41\u514D: [${rawPrimaryTitle}] vs [${rawSecTitle}] (Probe\u5F3A\u5339\u914D)`);
       } else {
         logReason(rawSecTitle, `\u5B63\u5EA6\u6807\u8BB0\u51B2\u7A81`);
         continue;
       }
     }
-    let scoreFull = calculateSimilarity(primaryTitleForSim, secTitleForSim);
-    const baseB = removeParentheses(secTitleForSim);
-    let scoreBase = calculateSimilarity(baseA, baseB);
-    let score = Math.max(scoreFull, scoreBase);
+    const secCandidates = [secTitleForSim];
+    if (secAnime.aliases && Array.isArray(secAnime.aliases)) {
+      secAnime.aliases.forEach((alias) => {
+        let cleanAlias = alias.replace(RegexStore.Clean.YEAR_TAG, "").replace(/【(电影|电视剧)】/g, "").trim();
+        if (cleanAlias) secCandidates.push(cleanAlias);
+      });
+    }
+    let bestScoreFull = 0, bestScoreBase = 0;
+    for (const candTitle of secCandidates) {
+      const sFull = calculateSimilarity(primaryTitleForSim, candTitle);
+      if (sFull > bestScoreFull) bestScoreFull = sFull;
+      const candBase = removeParentheses(candTitle);
+      const sBase = calculateSimilarity(baseA, candBase);
+      if (sBase > bestScoreBase) bestScoreBase = sBase;
+    }
+    let score = Math.max(bestScoreFull, bestScoreBase);
     const originalScore = score;
-    if (hasStructureConflict) {
-      score -= 0.15;
-    }
-    if (dateScore !== -1) {
-      score += dateScore;
-    }
+    if (hasStructureConflict) score += MergeWeights.TITLE_STRUCTURE_CONFLICT;
+    if (dateScore !== -1) score += dateScore;
     const isPrimaryCn = primaryLang === "CN";
     const isSecCn = secLang === "CN";
-    if (isPrimaryCn && isSecCn) {
-      score += 0.15;
-    } else if (isPrimaryCn !== isSecCn) {
-      score -= 0.2;
-    }
+    if (isPrimaryCn && isSecCn) score += MergeWeights.LANG_MATCH_CN;
+    else if (isPrimaryCn !== isSecCn) score += MergeWeights.LANG_MISMATCH;
     if (contentProbe.isStrongMatch) {
-      log2("info", `[Merge-Check] \u96C6\u5185\u5BB9\u63A2\u6D4B: \u5F3A\u5339\u914D! \u63D0\u5347\u5206\u6570 (\u539F\u5206: ${score.toFixed(2)}) -> 0.98`);
-      score = Math.max(score, 0.98);
+      log2("info", `[Merge-Check] \u96C6\u5185\u5BB9\u63A2\u6D4B: \u5F3A\u5339\u914D! \u63D0\u5347\u5206\u6570 (\u539F\u5206: ${score.toFixed(2)}) -> ${Thresholds.SIMILARITY_STRONG}`);
+      score = Math.max(score, Thresholds.SIMILARITY_STRONG);
     } else if (contentProbe.isStrongMismatch) {
       logReason(rawSecTitle, `\u96C6\u5185\u5BB9\u63A2\u6D4B: \u5F3A\u4E0D\u5339\u914D (\u96C6\u6807\u9898/\u5185\u5BB9\u5DEE\u5F02\u5DE8\u5927)`);
       score = 0;
     }
-    if (score < 0.6) {
+    if (score < Thresholds.SIMILARITY_MIN) {
       const cleanA = cleanPrimarySim;
       const cleanB = cleanTitleForSimilarity(secTitleForSim);
       logReason(rawSecTitle, `\u76F8\u4F3C\u5EA6\u4E0D\u8DB3: ${score.toFixed(2)} (Raw:${originalScore.toFixed(2)}, CleanA:"${cleanA}", CleanB:"${cleanB}")`);
     } else {
       if (score > maxScore) maxScore = score;
-      validCandidates.push({
-        anime: secAnime,
-        score,
-        lang: secLang,
-        debugTitle: rawSecTitle
-      });
+      validCandidates.push({ anime: secAnime, score, lang: secLang, debugTitle: rawSecTitle });
       log2("info", `[Merge-Check] \u5019\u9009\u9009\u4E2D: ${rawSecTitle} Score=${score.toFixed(2)} (BestSoFar=${maxScore.toFixed(2)})`);
     }
   }
-  if (validCandidates.length === 0 || maxScore < 0.6) return [];
-  const TIER_TOLERANCE_DEFAULT = 1e-3;
-  const TIER_TOLERANCE_CN = 0.4;
-  const TIER_TOLERANCE_PART = 0.5;
-  const markersP = extractSeasonMarkers(rawPrimaryTitle, primaryAnime.typeDescription);
-  const seasonsP = Array.from(markersP).filter((m) => m.startsWith("S"));
+  if (validCandidates.length === 0 || maxScore < Thresholds.SIMILARITY_MIN) return [];
   const finalResults = validCandidates.filter((candidate) => {
-    const isTopScore = candidate.score >= maxScore - TIER_TOLERANCE_DEFAULT;
-    if (isTopScore) return true;
-    const isHighTierCn = candidate.lang === "CN" && candidate.score >= maxScore - TIER_TOLERANCE_CN;
-    if (isHighTierCn) return true;
+    if (candidate.score >= maxScore - Thresholds.TIER_DEFAULT) return true;
+    if (candidate.lang === "CN" && candidate.score >= maxScore - Thresholds.TIER_CN) return true;
     const markersC = extractSeasonMarkers(candidate.debugTitle, candidate.anime.typeDescription);
     const hasPart = Array.from(markersC).some((m) => m.startsWith("P"));
-    if (hasPart && candidate.score >= maxScore - TIER_TOLERANCE_PART) {
+    if (hasPart && candidate.score >= maxScore - Thresholds.TIER_PART) {
       const seasonsC = Array.from(markersC).filter((m) => m.startsWith("S"));
       if (seasonsP.length > 0 && seasonsC.length > 0) {
         const hasIntersection = seasonsP.some((sp) => seasonsC.includes(sp));
         if (hasIntersection) return true;
-      } else {
-        return true;
-      }
+      } else return true;
     }
     return false;
   });
   finalResults.sort((a, b) => b.score - a.score);
   return finalResults.map((item) => item.anime);
-}
-function extractEpisodeInfo(title, sourceName = "") {
-  let isStrictSpecial = false;
-  let effectiveSource = sourceName;
-  if (title) {
-    const tagMatch = title.match(RE_DANDAN_TAG);
-    if (tagMatch) {
-      effectiveSource = tagMatch[1].toLowerCase();
-    }
-  }
-  const isDandanOrAnimeko = /^(dandan|animeko)$/i.test(effectiveSource);
-  if (isDandanOrAnimeko && title) {
-    let rawTemp = title.replace(RE_SOURCE_TAG, "").replace(RE_FROM_SUFFIX, "").trim();
-    if (RE_SPECIAL_START.test(rawTemp)) {
-      isStrictSpecial = true;
-    }
-  }
-  const t = cleanText(title || "");
-  const isMovie = RE_MOVIE_CHECK.test(t);
-  const isPV = RE_PV_CHECK.test(t);
-  let num = null;
-  let season = null;
-  const isSpecial = isPV || isStrictSpecial || RE_SPECIAL_CHECK.test(t);
-  const seasonMatch = t.match(RE_EP_SEASON_MATCH);
-  if (seasonMatch) {
-    season = parseInt(seasonMatch[1]);
-  }
-  const seasonEpMatch = t.match(RE_EP_NUM_STRATEGY_A);
-  if (seasonEpMatch) {
-    num = parseFloat(seasonEpMatch[2]);
-  } else {
-    const strongPrefixMatch = t.match(RE_EP_NUM_STRATEGY_B);
-    if (strongPrefixMatch) {
-      num = parseFloat(strongPrefixMatch[1]);
-    } else {
-      const weakPrefixMatch = t.match(RE_EP_NUM_STRATEGY_C);
-      if (weakPrefixMatch) {
-        num = parseFloat(weakPrefixMatch[1]);
-      }
-    }
-  }
-  return { isMovie, num, isSpecial, isPV, season, isStrictSpecial };
 }
 function getSpecialEpisodeType(title) {
   if (!title) return null;
@@ -4654,72 +4786,101 @@ function getSpecialEpisodeType(title) {
   if (t.includes("bloopers")) return "Bloopers";
   return null;
 }
+function extractEpisodeInfo(title, sourceName = "") {
+  let isStrictSpecial = false;
+  let effectiveSource = sourceName;
+  if (title) {
+    const tagMatch = title.match(RegexStore.Episode.DANDAN_TAG);
+    if (tagMatch) effectiveSource = tagMatch[1].toLowerCase();
+  }
+  const isDandanOrAnimeko = /^(dandan|animeko)$/i.test(effectiveSource);
+  if (isDandanOrAnimeko && title) {
+    let rawTemp = title.replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").trim();
+    if (RegexStore.Episode.SPECIAL_START.test(rawTemp) || RegexStore.Episode.DANDAN_IGNORE.test(rawTemp)) {
+      isStrictSpecial = true;
+    }
+  }
+  const t = cleanText(title || "");
+  const isMovie = RegexStore.Episode.MOVIE_CHECK.test(t);
+  const isPV = RegexStore.Episode.PV_CHECK.test(t);
+  let num = null, season = null;
+  const specialTypeTag = getSpecialEpisodeType(title);
+  const isSpecial = isPV || isStrictSpecial || !!specialTypeTag || RegexStore.Episode.SPECIAL_CHECK.test(t);
+  const seasonMatch = t.match(RegexStore.Episode.SEASON_MATCH);
+  if (seasonMatch) season = parseInt(seasonMatch[1]);
+  const seasonEpMatch = t.match(RegexStore.Episode.NUM_STRATEGY_A);
+  if (seasonEpMatch) num = parseFloat(seasonEpMatch[2]);
+  else {
+    const strongPrefixMatch = t.match(RegexStore.Episode.NUM_STRATEGY_B);
+    if (strongPrefixMatch) num = parseFloat(strongPrefixMatch[1]);
+    else {
+      const weakPrefixMatch = t.match(RegexStore.Episode.NUM_STRATEGY_C);
+      if (weakPrefixMatch) num = parseFloat(weakPrefixMatch[1]);
+    }
+  }
+  return { isMovie, num, isSpecial, isPV, season, isStrictSpecial };
+}
 function filterEpisodes(links, filterRegex) {
   if (!links) return [];
-  if (!filterRegex) {
-    return links.map((link, index) => ({ link, originalIndex: index }));
-  }
+  if (!filterRegex) return links.map((link, index) => ({ link, originalIndex: index }));
   return links.map((link, index) => ({ link, originalIndex: index })).filter((item) => {
     const title = item.link.title || item.link.name || "";
     return !filterRegex.test(title);
   });
 }
-function getLongestCommonSubstring(str1, str2) {
-  if (!str1 || !str2) return "";
-  let maxSub = "";
-  const len1 = str1.length;
-  for (let i = 0; i < len1; i++) {
-    for (let j = i + 1; j <= len1; j++) {
-      const sub = str1.substring(i, j);
-      if (str2.includes(sub)) {
-        if (sub.length > maxSub.length) maxSub = sub;
-      }
-    }
-  }
-  return maxSub;
-}
+var _redundantTitleRegexCache = /* @__PURE__ */ new Map();
 function identifyRedundantTitle(links, seriesTitle, sourceName) {
   if (!links || links.length < 2 || !seriesTitle) return "";
   const cleanSource = (text) => {
     if (!text || !sourceName) return text || "";
     try {
-      const escapedSource = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(\\[|\u3010|\\s)?${escapedSource}(\\]|\u3011|\\s)?`, "gi");
+      let regex = _redundantTitleRegexCache.get(sourceName);
+      if (!regex) {
+        const escapedSource = sourceName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        regex = new RegExp(`(\\[|\u3010|\\s)?${escapedSource}(\\]|\u3011|\\s)?`, "gi");
+        _redundantTitleRegexCache.set(sourceName, regex);
+      }
       return text.replace(regex, "").trim();
     } catch (e) {
       return text;
     }
   };
   let cleanSeriesTitle = cleanSource(seriesTitle);
-  const separatorMatch = cleanSeriesTitle.match(RE_REDUNDANT_SEPARATOR);
-  if (separatorMatch) {
-    cleanSeriesTitle = cleanSeriesTitle.substring(0, separatorMatch.index);
-  }
+  const separatorMatch = cleanSeriesTitle.match(RegexStore.Clean.REDUNDANT_SEPARATOR);
+  if (separatorMatch) cleanSeriesTitle = cleanSeriesTitle.substring(0, separatorMatch.index);
   const titles = links.map((item) => {
     const realLink = item.link || item;
     if (!realLink) return "";
     return cleanSource(realLink.title || realLink.name || "");
   });
   if (titles.some((t) => !t)) return "";
-  let common = getLongestCommonSubstring(titles[0], titles[1]);
+  const getLCS = (s1, s2) => {
+    let maxSub = "";
+    for (let i = 0; i < s1.length; i++) {
+      for (let j = i + 1; j <= s1.length; j++) {
+        const sub = s1.substring(i, j);
+        if (s2.includes(sub)) {
+          if (sub.length > maxSub.length) maxSub = sub;
+        }
+      }
+    }
+    return maxSub;
+  };
+  let common = getLCS(titles[0], titles[1]);
   if (common.length < 2) return "";
   for (let i = 2; i < titles.length; i++) {
-    common = getLongestCommonSubstring(common, titles[i]);
+    common = getLCS(common, titles[i]);
     if (common.length < 2) return "";
   }
-  const validatedRedundant = getLongestCommonSubstring(common, cleanSeriesTitle);
-  if (!cleanSeriesTitle.startsWith(validatedRedundant)) {
-    return "";
-  }
-  if (RE_REDUNDANT_UNSAFE_END.test(validatedRedundant)) {
+  const validatedRedundant = getLCS(common, cleanSeriesTitle);
+  if (!cleanSeriesTitle.startsWith(validatedRedundant)) return "";
+  if (RegexStore.Clean.REDUNDANT_UNSAFE_END.test(validatedRedundant)) {
     const trimmed = validatedRedundant.slice(0, -1).trim();
-    if (trimmed.length >= 2 && cleanSeriesTitle.startsWith(trimmed)) {
-      return trimmed;
-    }
+    if (trimmed.length >= 2 && cleanSeriesTitle.startsWith(trimmed)) return trimmed;
     return "";
   }
   if (validatedRedundant.length >= 2) {
-    if (RE_REDUNDANT_VALID_CHARS.test(validatedRedundant) || validatedRedundant.length > 3) {
+    if (RegexStore.Clean.REDUNDANT_VALID_CHARS.test(validatedRedundant) || validatedRedundant.length > 3) {
       log2("info", `[Merge-Check] \u68C0\u6D4B\u5230\u96C6\u5185\u5197\u4F59\u6807\u9898\u5B57\u6BB5: "${validatedRedundant}" (\u5DF2\u5FFD\u7565\u6765\u6E90: ${sourceName}, \u951A\u5B9A\u9A8C\u8BC1\u901A\u8FC7)`);
       return validatedRedundant;
     }
@@ -4732,130 +4893,77 @@ function findBestAlignmentOffset(primaryLinks, secondaryLinks, seriesLangA = "Un
   const redundantB = identifyRedundantTitle(secondaryLinks, secondarySeriesTitle, sourceB);
   const getTempTitle = (rawTitle, redundantStr) => {
     if (!rawTitle) return "";
-    if (redundantStr && rawTitle.includes(redundantStr)) {
-      return rawTitle.replace(redundantStr, "");
-    }
+    if (redundantStr && rawTitle.includes(redundantStr)) return rawTitle.replace(redundantStr, "");
     return rawTitle;
   };
-  const pInfos = primaryLinks.map((item) => {
+  const processLink = (item, source, seriesLang, red) => {
     const rawTitle = item.link.title || "";
-    const cleanTitle = getTempTitle(rawTitle, redundantA);
-    const info = extractEpisodeInfo(cleanTitle, sourceA);
+    const cleanTitle = getTempTitle(rawTitle, red);
+    const info = extractEpisodeInfo(cleanTitle, source);
     const epLang = getLanguageType(cleanTitle);
-    const effLang = epLang !== "Unspecified" ? epLang : seriesLangA;
-    const specialType = getSpecialEpisodeType(cleanTitle);
+    const effLang = epLang !== "Unspecified" ? epLang : seriesLang;
+    const finalLang = effLang === "Unspecified" && /^(dandan|animeko)$/i.test(source) ? "JP" : effLang;
     const cleanEpText = cleanEpisodeText(cleanTitle);
-    const strictCnCore = effLang === "CN" ? cleanTitle.replace(RE_CN_STRICT_CORE_REMOVE, "") : null;
-    return { info, effLang, specialType, cleanEpText, strictCnCore };
+    const strictCnCore = finalLang === "CN" ? cleanTitle.replace(RegexStore.Similarity.CN_STRICT_CORE_REMOVE, "") : null;
+    return { info, effLang: finalLang, specialType: getSpecialEpisodeType(cleanTitle), cleanEpText, strictCnCore };
+  };
+  const pInfos = primaryLinks.map((item) => processLink(item, sourceA, seriesLangA, redundantA));
+  const sInfos = secondaryLinks.map((item) => processLink(item, sourceB, seriesLangB, redundantB));
+  let bestOffset = 0, maxScore = -9999;
+  let minNormalA = null, minNormalB = null;
+  pInfos.forEach(({ info }) => {
+    if (info.num !== null && !info.isSpecial) minNormalA = minNormalA === null ? info.num : Math.min(minNormalA, info.num);
   });
-  const sInfos = secondaryLinks.map((item) => {
-    const rawTitle = item.link.title || "";
-    const cleanTitle = getTempTitle(rawTitle, redundantB);
-    const info = extractEpisodeInfo(cleanTitle, sourceB);
-    const epLang = getLanguageType(cleanTitle);
-    let effLang = epLang !== "Unspecified" ? epLang : seriesLangB;
-    if (effLang === "Unspecified" && /^(dandan|animeko)$/i.test(sourceB)) {
-      effLang = "JP";
-    }
-    const specialType = getSpecialEpisodeType(cleanTitle);
-    const cleanEpText = cleanEpisodeText(cleanTitle);
-    const strictCnCore = effLang === "CN" ? cleanTitle.replace(RE_CN_STRICT_CORE_REMOVE, "") : null;
-    return { info, effLang, specialType, cleanEpText, strictCnCore };
+  sInfos.forEach(({ info }) => {
+    if (info.num !== null && !info.isSpecial) minNormalB = minNormalB === null ? info.num : Math.min(minNormalB, info.num);
   });
-  let bestOffset = 0;
-  let maxScore = -9999;
-  let minNormalA = null;
-  let minNormalB = null;
-  for (const { info } of pInfos) {
-    if (info.num !== null && !info.isSpecial) {
-      if (minNormalA === null || info.num < minNormalA) minNormalA = info.num;
-    }
-  }
-  for (const { info } of sInfos) {
-    if (info.num !== null && !info.isSpecial) {
-      if (minNormalB === null || info.num < minNormalB) minNormalB = info.num;
-    }
-  }
   const seasonShift = minNormalA !== null && minNormalB !== null ? minNormalA - minNormalB : null;
   const baseRange = 15;
   const targetShift = seasonShift !== null ? -seasonShift : 0;
-  const minSearch = Math.min(-baseRange, targetShift - baseRange);
-  const maxSearch = Math.max(baseRange, targetShift + baseRange);
-  const safeMin = Math.max(minSearch, -Math.max(primaryLinks.length, secondaryLinks.length));
-  const safeMax = Math.min(maxSearch, Math.max(primaryLinks.length, secondaryLinks.length));
+  const safeMin = Math.max(Math.min(-baseRange, targetShift - baseRange), -Math.max(primaryLinks.length, secondaryLinks.length));
+  const safeMax = Math.min(Math.max(baseRange, targetShift + baseRange), Math.max(primaryLinks.length, secondaryLinks.length));
   for (let offset = safeMin; offset <= safeMax; offset++) {
-    let totalTextScore = 0;
-    let rawTextScoreSum = 0;
-    let matchCount = 0;
+    let totalTextScore = 0, rawTextScoreSum = 0, matchCount = 0;
     let numericDiffs = /* @__PURE__ */ new Map();
+    let hasSeasonShiftMatch = false;
     for (let i = 0; i < secondaryLinks.length; i++) {
       const pIndex = i + offset;
       if (pIndex >= 0 && pIndex < primaryLinks.length) {
-        const dataA = pInfos[pIndex];
-        const dataB = sInfos[i];
-        const infoA = dataA.info;
-        const infoB = dataB.info;
+        const dataA = pInfos[pIndex], dataB = sInfos[i];
+        const infoA = dataA.info, infoB = dataB.info;
         let pairScore = 0;
-        if (infoA.isMovie !== infoB.isMovie) {
-          pairScore -= 5;
-        }
-        if (infoA.isStrictSpecial && !infoB.isSpecial || infoB.isStrictSpecial && !infoA.isSpecial) {
-          pairScore -= 8;
-        }
-        const effLangA = dataA.effLang;
-        const effLangB = dataB.effLang;
-        if (effLangA !== "Unspecified" && effLangB !== "Unspecified") {
-          if (effLangA === effLangB) {
-            pairScore += 3;
-          } else {
-            pairScore -= 5;
-          }
-        }
-        if (infoA.season !== null && infoB.season !== null && infoA.season !== infoB.season) {
-          pairScore -= 10;
-        }
+        if (infoA.isMovie !== infoB.isMovie) pairScore += MergeWeights.EP_ALIGN.MOVIE_TYPE_MISMATCH;
+        if (infoA.isStrictSpecial && !infoB.isSpecial || infoB.isStrictSpecial && !infoA.isSpecial) pairScore += MergeWeights.EP_ALIGN.SPECIAL_STRICT_MISMATCH;
+        const normLangA = dataA.effLang === "Unspecified" ? "JP" : dataA.effLang;
+        const normLangB = dataB.effLang === "Unspecified" ? "JP" : dataB.effLang;
+        if (normLangA === normLangB) pairScore += MergeWeights.EP_ALIGN.LANG_MATCH;
+        else pairScore += MergeWeights.EP_ALIGN.LANG_MISMATCH;
+        if (infoA.season !== null && infoB.season !== null && infoA.season !== infoB.season) pairScore += MergeWeights.EP_ALIGN.SEASON_NUM_MISMATCH;
         if (dataA.specialType || dataB.specialType) {
-          if (dataA.specialType !== dataB.specialType) {
-            pairScore -= 10;
-          } else {
-            pairScore += 3;
-          }
+          if (dataA.specialType !== dataB.specialType) pairScore += MergeWeights.EP_ALIGN.SPECIAL_TYPE_MISMATCH;
+          else pairScore += MergeWeights.EP_ALIGN.SPECIAL_TYPE_MATCH;
         }
-        if (infoA.isSpecial === infoB.isSpecial) {
-          pairScore += 3;
-        }
+        if (infoA.isSpecial === infoB.isSpecial) pairScore += MergeWeights.EP_ALIGN.IS_SPECIAL_MATCH;
         if (seasonShift !== null && !infoA.isSpecial && !infoB.isSpecial) {
           if (infoA.num - infoB.num === seasonShift) {
-            pairScore += 5;
+            pairScore += MergeWeights.EP_ALIGN.SEASON_SHIFT_EXACT;
+            hasSeasonShiftMatch = true;
           }
         }
         let sim = 0;
-        if (effLangA === "CN" && effLangB === "CN") {
-          const coreA = dataA.strictCnCore;
-          const coreB = dataB.strictCnCore;
-          if (coreA && coreB && (coreA.includes(coreB) || coreB.includes(coreA))) {
-            if (infoA.num !== null && infoB.num !== null && infoA.num === infoB.num) {
-              sim = 25;
-            } else {
-              sim = -5;
-            }
-          } else {
-            sim = calculateSimilarity(dataA.cleanEpText, dataB.cleanEpText);
-          }
-        } else {
-          sim = calculateSimilarity(dataA.cleanEpText, dataB.cleanEpText);
-        }
+        if (dataA.effLang === "CN" && dataB.effLang === "CN" && dataA.strictCnCore && dataB.strictCnCore) {
+          if (dataA.strictCnCore.includes(dataB.strictCnCore) || dataB.strictCnCore.includes(dataA.strictCnCore)) {
+            if (infoA.num !== null && infoB.num !== null && infoA.num === infoB.num) sim = MergeWeights.EP_ALIGN.CN_STRICT_MATCH;
+            else sim = MergeWeights.EP_ALIGN.CN_STRICT_MISMATCH;
+          } else sim = calculateSimilarity(dataA.cleanEpText, dataB.cleanEpText);
+        } else sim = calculateSimilarity(dataA.cleanEpText, dataB.cleanEpText);
         pairScore += sim;
         rawTextScoreSum += sim;
-        if (infoA.num !== null && infoB.num !== null && infoA.num === infoB.num) {
-          pairScore += 2;
-        }
+        if (infoA.num !== null && infoB.num !== null && infoA.num === infoB.num) pairScore += MergeWeights.EP_ALIGN.NUMERIC_MATCH;
         totalTextScore += pairScore;
         if (infoA.num !== null && infoB.num !== null) {
-          const diff = infoB.num - infoA.num;
-          const diffKey = diff.toFixed(4);
-          const count = numericDiffs.get(diffKey) || 0;
-          numericDiffs.set(diffKey, count + 1);
+          const diffKey = (infoB.num - infoA.num).toFixed(4);
+          numericDiffs.set(diffKey, (numericDiffs.get(diffKey) || 0) + 1);
         }
         matchCount++;
       }
@@ -4863,20 +4971,17 @@ function findBestAlignmentOffset(primaryLinks, secondaryLinks, seriesLangA = "Un
     if (matchCount > 0) {
       let finalScore = totalTextScore / matchCount;
       let maxFrequency = 0;
-      for (const count of numericDiffs.values()) {
-        if (count > maxFrequency) maxFrequency = count;
-      }
+      for (const count of numericDiffs.values()) maxFrequency = Math.max(maxFrequency, count);
       const consistencyRatio = maxFrequency / matchCount;
       const avgRawTextScore = rawTextScoreSum / matchCount;
-      if (consistencyRatio > 0.6 && avgRawTextScore > 0.33) {
-        finalScore += 2;
+      if (consistencyRatio > 0.6) {
+        if (hasSeasonShiftMatch || avgRawTextScore > 0.33) finalScore += MergeWeights.EP_ALIGN.PATTERN_CONSISTENCY_BONUS;
       }
-      const coverageBonus = Math.min(matchCount * 0.15, 1.5);
-      finalScore += coverageBonus;
+      finalScore += Math.min(matchCount * 0.15, 1.5);
       const zeroDiffCount = numericDiffs.get("0.0000") || 0;
       if (zeroDiffCount > 3) {
-        finalScore += zeroDiffCount * 5;
-        finalScore += 100;
+        finalScore += MergeWeights.EP_ALIGN.ZERO_DIFF_BONUS_BASE;
+        finalScore += zeroDiffCount * MergeWeights.EP_ALIGN.ZERO_DIFF_BONUS_PER_HIT;
       } else if (zeroDiffCount > 0) {
         finalScore += zeroDiffCount * 2;
       }
@@ -4891,10 +4996,7 @@ function findBestAlignmentOffset(primaryLinks, secondaryLinks, seriesLangA = "Un
 function generateSafeMergedId(id1, id2, salt = "") {
   const str = `${id1}_${id2}_${salt}`;
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
+  for (let i = 0; i < str.length; i++) hash = (hash << 5) - hash + str.charCodeAt(i) | 0;
   return Math.abs(hash) % 1e9 + 1e9;
 }
 function createNewLink(item, sourceName) {
@@ -4903,60 +5005,169 @@ function createNewLink(item, sourceName) {
   let newUrl = rawLink.url || "";
   if (newUrl) {
     newUrl = sanitizeUrl(newUrl);
-    if (!/^https?:\/\//i.test(newUrl)) {
-      newUrl = `${sourceName}:${newUrl}`;
-    }
+    if (!/^https?:\/\//i.test(newUrl)) newUrl = `${sourceName}:${newUrl}`;
   }
   let displayTitle = rawTitle;
-  if (!displayTitle.includes(`\u3010${sourceName}\u3011`)) {
-    displayTitle = `\u3010${sourceName}\u3011 ${displayTitle}`;
-  }
-  return {
-    title: displayTitle,
-    url: newUrl,
-    name: rawTitle
-  };
+  if (!displayTitle.includes(`\u3010${sourceName}\u3011`)) displayTitle = `\u3010${sourceName}\u3011 ${displayTitle}`;
+  return { title: displayTitle, url: newUrl, name: rawTitle };
 }
 function stitchUnmatchedEpisodes(derivedAnime, orphans, sourceName) {
   if (!orphans || orphans.length === 0) return;
-  const headList = [];
-  const tailList = [];
-  const specialList = [];
+  const headList = [], tailList = [], specialList = [];
   const currentLen = derivedAnime.links.length;
+  let lastPrimaryMainIndex = -1;
+  for (let i = currentLen - 1; i >= 0; i--) {
+    const link = derivedAnime.links[i];
+    const title = link.title || link.name || "";
+    const info = extractEpisodeInfo(title, derivedAnime.source);
+    if (!info.isSpecial && !info.isPV && !info.isStrictSpecial && info.num !== null) {
+      lastPrimaryMainIndex = i;
+      break;
+    }
+  }
   for (const item of orphans) {
     const relativeIdx = item.relativeIndex;
     const isStrictSpecial = item.info && item.info.isStrictSpecial;
-    if (relativeIdx < 0 && !isStrictSpecial) {
-      headList.push(item);
-    } else if (relativeIdx >= currentLen && !isStrictSpecial) {
-      tailList.push(item);
-    } else {
-      specialList.push(item);
-    }
+    const isOrphanMain = item.info && !item.info.isSpecial && !item.info.isPV && !isStrictSpecial && item.info.num !== null;
+    if (relativeIdx < 0 && !isStrictSpecial) headList.push(item);
+    else if (relativeIdx >= currentLen && !isStrictSpecial || isOrphanMain && relativeIdx > lastPrimaryMainIndex) tailList.push(item);
+    else specialList.push(item);
   }
   const addedLogs = [];
+  const processList = (list, target, msg) => {
+    if (list.length > 0) {
+      list.sort((a, b) => a.originalIndex - b.originalIndex);
+      target.push(...list.map((it) => createNewLink(it, sourceName)));
+      addedLogs.push(`   [\u8865\u5168-${msg}] \u63D2\u5165/\u8FFD\u52A0 ${list.length} \u96C6 (${list.map((i) => i.link.title).join(", ")})`);
+    }
+  };
   if (headList.length > 0) {
     headList.sort((a, b) => a.originalIndex - b.originalIndex);
-    const newLinks = headList.map((it) => createNewLink(it, sourceName));
-    derivedAnime.links.unshift(...newLinks);
+    derivedAnime.links.unshift(...headList.map((it) => createNewLink(it, sourceName)));
     addedLogs.push(`   [\u8865\u5168-\u5934\u90E8] \u63D2\u5165 ${headList.length} \u96C6 (${headList.map((i) => i.link.title).join(", ")})`);
   }
-  if (tailList.length > 0) {
-    tailList.sort((a, b) => a.originalIndex - b.originalIndex);
-    const newLinks = tailList.map((it) => createNewLink(it, sourceName));
-    derivedAnime.links.push(...newLinks);
-    addedLogs.push(`   [\u8865\u5168-\u5C3E\u90E8] \u8FFD\u52A0 ${tailList.length} \u96C6 (${tailList.map((i) => i.link.title).join(", ")})`);
-  }
-  if (specialList.length > 0) {
-    specialList.sort((a, b) => a.originalIndex - b.originalIndex);
-    const newLinks = specialList.map((it) => createNewLink(it, sourceName));
-    derivedAnime.links.push(...newLinks);
-    addedLogs.push(`   [\u8865\u5168-\u7279\u6B8A] \u8865\u5145 ${specialList.length} \u96C6 (\u4E2D\u95F4\u7F3A\u5931\u6216\u756A\u5916) (${specialList.map((i) => i.link.title).join(", ")})`);
-  }
-  if (addedLogs.length > 0) {
-    log2("info", `[Merge] [${sourceName}] \u667A\u80FD\u8865\u5168:
+  processList(tailList, derivedAnime.links, "\u5C3E\u90E8");
+  processList(specialList, derivedAnime.links, "\u7279\u6B8A");
+  if (addedLogs.length > 0) log2("info", `[Merge] [${sourceName}] \u667A\u80FD\u8865\u5168:
 ${addedLogs.join("\n")}`);
+}
+function getDecimalEpisodes(links, source) {
+  const decimals = /* @__PURE__ */ new Set();
+  if (!links) return decimals;
+  let lastIntegerIndex = -1;
+  for (let i = 0; i < links.length; i++) {
+    const title = links[i].title || links[i].name || "";
+    const info = extractEpisodeInfo(title, source);
+    if (info.num !== null && !info.isSpecial && !info.isPV && info.num % 1 === 0) lastIntegerIndex = i;
   }
+  links.forEach((l, i) => {
+    const title = l.title || l.name || "";
+    const info = extractEpisodeInfo(title, source);
+    if (info.num !== null && !info.isSpecial && !info.isPV && info.num % 1 !== 0) {
+      if (i < lastIntegerIndex) decimals.add(info.num);
+    }
+  });
+  return decimals;
+}
+function sinkDecimalEpisodes(links, numsToSink, source, sideName) {
+  const normals = [], sinkers = [];
+  let movedCount = 0;
+  links.forEach((link) => {
+    const title = link.title || link.name || "";
+    const info = extractEpisodeInfo(title, source);
+    const isTarget = info.num !== null && numsToSink.has(info.num);
+    if (isTarget) {
+      sinkers.push(link);
+      movedCount++;
+    } else normals.push(link);
+  });
+  if (movedCount > 0) {
+    links.length = 0;
+    links.push(...normals, ...sinkers);
+    log2("info", `[Merge-Check] [${sideName}] \u81EA\u52A8\u6C89\u5E95: \u79FB\u52A8\u4E86 ${movedCount} \u4E2A\u4E2D\u95F4\u63D2\u503C\u96C6\u6570 (${Array.from(numsToSink).join(",")}) \u5230\u672B\u5C3E`);
+  }
+}
+function buildSeasonLengthMap(allGroupAnimes, epFilter, collectionAnimeIds) {
+  const seasonStats = /* @__PURE__ */ new Map();
+  const debugLogs = [];
+  for (const anime of allGroupAnimes) {
+    if (collectionAnimeIds && collectionAnimeIds.has(anime.animeId)) {
+      continue;
+    }
+    const realAnime = globals.animes.find((a) => String(a.animeId) === String(anime.animeId)) || anime;
+    const category = getContentCategory(realAnime.animeTitle, realAnime.typeDescription, realAnime.source);
+    if (category === "REAL") {
+      debugLogs.push(`   [\u5254\u9664] [${realAnime.source}] ${realAnime.animeTitle} (\u7C7B\u578B: \u771F\u4EBA\u5267/REAL)`);
+      continue;
+    }
+    const mediaType = getStrictMediaType(realAnime.animeTitle, realAnime.typeDescription);
+    if (mediaType === "MOVIE") {
+      debugLogs.push(`   [\u5254\u9664] [${realAnime.source}] ${realAnime.animeTitle} (\u7C7B\u578B: \u7535\u5F71/MOVIE)`);
+      continue;
+    }
+    const seasonNum = getSeasonNumber(realAnime.animeTitle, realAnime.typeDescription);
+    if (seasonNum !== null && realAnime.links) {
+      const validLinks = filterEpisodes(realAnime.links, epFilter).filter((item) => {
+        const title = item.link.title || item.link.name || "";
+        const cleanT = cleanText(title);
+        const rawTemp = cleanT.replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").trim();
+        if (/^(dandan|animeko)$/i.test(realAnime.source)) {
+          if (RegexStore.Episode.SPECIAL_CHECK.test(rawTemp) || RegexStore.Episode.DANDAN_IGNORE.test(rawTemp)) return false;
+        }
+        if (RegexStore.Episode.MAP_EXCLUDE_KEYWORDS.test(rawTemp) || RegexStore.Episode.MAP_EXCLUDE_KEYWORDS.test(title)) return false;
+        return true;
+      });
+      const count = validLinks.length;
+      if (count > 0) {
+        if (!seasonStats.has(seasonNum)) seasonStats.set(seasonNum, /* @__PURE__ */ new Map());
+        const freqMap = seasonStats.get(seasonNum);
+        if (!freqMap.has(count)) freqMap.set(count, []);
+        freqMap.get(count).push(realAnime.source);
+        debugLogs.push(`   [\u91C7\u7EB3] [${realAnime.source}] S${seasonNum} = ${count}\u96C6 ("${realAnime.animeTitle}")`);
+      } else {
+        debugLogs.push(`   [\u5FFD\u7565] [${realAnime.source}] S${seasonNum} (\u6709\u6548\u96C6\u6570\u4E3A 0)`);
+      }
+    } else {
+    }
+  }
+  const seasonMap = /* @__PURE__ */ new Map();
+  const resultLogs = [];
+  for (const [sNum, freqMap] of seasonStats.entries()) {
+    let modeCount = 0;
+    let maxFreq = 0;
+    let contributors = [];
+    for (const [count, sources] of freqMap.entries()) {
+      const freq = sources.length;
+      if (freq > maxFreq) {
+        maxFreq = freq;
+        modeCount = count;
+        contributors = sources;
+      } else if (freq === maxFreq) {
+        if (count < modeCount) {
+          modeCount = count;
+          contributors = sources;
+        }
+      }
+    }
+    seasonMap.set(sNum, modeCount);
+    const statDetails = Array.from(freqMap.entries()).map(([cnt, srcs]) => `${cnt}\u96C6(x${srcs.length})[${srcs.join(",")}]`).join(", ");
+    resultLogs.push(`S${sNum}=${modeCount} (\u63A8\u65AD\u6765\u6E90: ${contributors.join(",")} | \u7EDF\u8BA1: ${statDetails})`);
+  }
+  if (debugLogs.length > 0 || resultLogs.length > 0) {
+    log2("info", `[Merge-Check] [Map-Build] \u5B63\u5EA6\u5730\u56FE\u6784\u5EFA\u8BE6\u60C5:
+${debugLogs.join("\n")}
+   => \u6700\u7EC8\u5224\u5B9A: { ${resultLogs.join("; ")} }`);
+  }
+  return seasonMap;
+}
+function fastCloneAnime(anime) {
+  if (typeof structuredClone === "function") {
+    try {
+      return structuredClone(anime);
+    } catch (e) {
+    }
+  }
+  return JSON.parse(JSON.stringify(anime));
 }
 async function processMergeTask(params) {
   const {
@@ -4970,15 +5181,22 @@ async function processMergeTask(params) {
     groupFingerprint,
     currentPrimarySource,
     logPrefix,
-    limitSecondaryLang
+    limitSecondaryLang,
+    collectionAnimeIds,
+    allowReuseIds,
+    collectionProgress
   } = params;
+  if (collectionAnimeIds.has(pAnime.animeId) && globalConsumedIds.has(pAnime.animeId)) {
+    log2("info", `${logPrefix} \u8DF3\u8FC7: [${currentPrimarySource}] \u662F\u5408\u96C6\u4E14\u5DF2\u4F5C\u4E3A\u526F\u6E90\u53C2\u4E0E\u8FC7\u5408\u5E76\u3002`);
+    return null;
+  }
   const cachedPAnime = globals.animes.find((a) => String(a.animeId) === String(pAnime.animeId));
   if (!cachedPAnime?.links) {
     log2("warn", `${logPrefix} \u4E3B\u6E90\u6570\u636E\u4E0D\u5B8C\u6574\uFF0C\u8DF3\u8FC7: ${pAnime.animeTitle}`);
     return null;
   }
-  const logTitleA = pAnime.animeTitle.replace(RE_FROM_SUFFIX, "");
-  let derivedAnime = JSON.parse(JSON.stringify(cachedPAnime));
+  const logTitleA = pAnime.animeTitle.replace(RegexStore.Clean.FROM_SUFFIX, "");
+  let derivedAnime = fastCloneAnime(cachedPAnime);
   const actualMergedSources = [];
   const contentSignatureParts = [pAnime.animeId];
   let hasMergedAny = false;
@@ -4986,43 +5204,122 @@ async function processMergeTask(params) {
   const redundantP = identifyRedundantTitle(derivedAnime.links, pAnime.animeTitle, currentPrimarySource);
   const getTempTitle = (rawTitle, redundantStr) => {
     if (!rawTitle) return "";
-    if (redundantStr && rawTitle.includes(redundantStr)) {
-      return rawTitle.replace(redundantStr, "");
-    }
+    if (redundantStr && rawTitle.includes(redundantStr)) return rawTitle.replace(redundantStr, "");
     return rawTitle;
   };
+  const isPrimaryCollection = collectionAnimeIds.has(pAnime.animeId);
+  const pCleanTitle = cleanTitleForSimilarity(pAnime.animeTitle);
+  const peerAnimes = curAnimes.filter((a) => cleanTitleForSimilarity(a.animeTitle) === pCleanTitle);
+  const seasonLengthMap = buildSeasonLengthMap(peerAnimes, epFilter, collectionAnimeIds);
+  if (seasonLengthMap.size > 0) {
+    const mapDesc = Array.from(seasonLengthMap.entries()).map(([k, v]) => `S${k}=${v}`).join(", ");
+    if (isPrimaryCollection || availableSecondaries.some((s) => curAnimes.some((a) => a.source === s && collectionAnimeIds.has(a.animeId)))) {
+      log2("info", `${logPrefix} [\u5408\u96C6\u5904\u7406] \u6784\u5EFA\u5B63\u5EA6\u96C6\u6570\u5730\u56FE (Mode\u7B56\u7565): { ${mapDesc} }`);
+    }
+  }
   for (const secSource of availableSecondaries) {
-    let secondaryItems = curAnimes.filter((a) => a.source === secSource && !groupConsumedIds.has(a.animeId));
-    if (limitSecondaryLang) {
-      secondaryItems = secondaryItems.filter((a) => getLanguageType(a.animeTitle) === limitSecondaryLang);
+    let secondaryItems = curAnimes.filter((a) => {
+      if (a.source !== secSource) return false;
+      const isConsumed = groupConsumedIds.has(a.animeId);
+      const isAllowedReuse = allowReuseIds && allowReuseIds.has(a.animeId);
+      if (isConsumed && !isAllowedReuse) return false;
+      return true;
+    });
+    if (limitSecondaryLang) secondaryItems = secondaryItems.filter((a) => getLanguageType(a.animeTitle) === limitSecondaryLang);
+    if (secondaryItems.length > 1) {
+      secondaryItems.sort((a, b) => {
+        const isCnA = getLanguageType(a.animeTitle) === "CN";
+        const isCnB = getLanguageType(b.animeTitle) === "CN";
+        if (isCnA === isCnB) return 0;
+        return isCnA ? 1 : -1;
+      });
     }
     if (secondaryItems.length === 0) continue;
-    const matches = findSecondaryMatches(pAnime, secondaryItems);
+    const matches = findSecondaryMatches(pAnime, secondaryItems, collectionAnimeIds);
     for (const match of matches) {
-      if (groupConsumedIds.has(match.animeId)) continue;
+      const isReuse = allowReuseIds && allowReuseIds.has(match.animeId);
+      if (!isReuse && groupConsumedIds.has(match.animeId)) continue;
       const cachedMatch = globals.animes.find((a) => String(a.animeId) === String(match.animeId));
       if (!cachedMatch?.links) continue;
-      const mappingEntries = [];
-      const matchedPIndices = /* @__PURE__ */ new Set();
-      const pendingMutations = [];
-      const orphanedEpisodes = [];
-      const logTitleB = cachedMatch.animeTitle.replace(RE_FROM_SUFFIX, "");
-      const filteredPLinksWithIndex = filterEpisodes(derivedAnime.links, epFilter);
-      const filteredMLinksWithIndex = filterEpisodes(cachedMatch.links, epFilter);
-      const seriesLangB = getLanguageType(cachedMatch.animeTitle);
-      const offset = findBestAlignmentOffset(
-        filteredPLinksWithIndex,
-        filteredMLinksWithIndex,
-        seriesLangA,
-        seriesLangB,
-        currentPrimarySource,
-        secSource,
-        pAnime.animeTitle,
-        cachedMatch.animeTitle
-      );
-      if (offset !== 0) {
-        log2("info", `${logPrefix} \u96C6\u6570\u81EA\u52A8\u5BF9\u9F50 (${secSource}): Offset=${offset} (P:${filteredPLinksWithIndex.length}, S:${filteredMLinksWithIndex.length})`);
+      const mappingEntries = [], matchedPIndices = /* @__PURE__ */ new Set(), pendingMutations = [], orphanedEpisodes = [];
+      const logTitleB = cachedMatch.animeTitle.replace(RegexStore.Clean.FROM_SUFFIX, "");
+      const decimalsP = getDecimalEpisodes(derivedAnime.links, currentPrimarySource);
+      const decimalsS = getDecimalEpisodes(cachedMatch.links, secSource);
+      const toSinkS = new Set([...decimalsS].filter((x) => !decimalsP.has(x)));
+      const toSinkP = new Set([...decimalsP].filter((x) => !decimalsS.has(x)));
+      if (toSinkP.size > 0) sinkDecimalEpisodes(derivedAnime.links, toSinkP, currentPrimarySource, `\u4E3B\u6E90:${currentPrimarySource}`);
+      let currentSecondaryLinks = cachedMatch.links;
+      if (toSinkS.size > 0) {
+        currentSecondaryLinks = [...cachedMatch.links];
+        sinkDecimalEpisodes(currentSecondaryLinks, toSinkS, secSource, `\u526F\u6E90:${secSource}`);
       }
+      const filteredPLinksWithIndex = filterEpisodes(derivedAnime.links, epFilter);
+      const filteredMLinksWithIndex = filterEpisodes(currentSecondaryLinks, epFilter);
+      const seriesLangB = getLanguageType(cachedMatch.animeTitle);
+      let activePLinks = filteredPLinksWithIndex, activeMLinks = filteredMLinksWithIndex;
+      let sliceStartP = 0, sliceStartS = 0;
+      const isSecondaryCollection = collectionAnimeIds.has(match.animeId);
+      const performSlicing = (isPrimarySide, collectionLinks, seasonNum) => {
+        let sliceStart = 0, slicedList = collectionLinks;
+        if (seasonNum && seasonNum > 1) {
+          let historyFound = false;
+          if (!isPrimarySide && collectionProgress && collectionProgress.has(match.animeId)) {
+            const progress = collectionProgress.get(match.animeId);
+            const prevSeason = seasonNum - 1;
+            if (progress[`S${prevSeason}`] !== void 0) {
+              const inferredStart = progress[`S${prevSeason}`] + 1;
+              if (inferredStart > 0 && inferredStart < collectionLinks.length) {
+                slicedList = collectionLinks.slice(inferredStart);
+                sliceStart = inferredStart;
+                log2("info", `${logPrefix} [\u5408\u96C6\u5207\u7247] \u5386\u53F2\u63A8\u65AD\u547D\u4E2D: \u6839\u636E S${prevSeason} \u7ED3\u675F\u4F4D\u7F6E (Index ${progress[`S${prevSeason}`]}), \u8BBE\u5B9A S${seasonNum} \u8D77\u70B9\u4E3A Index ${inferredStart}`);
+                historyFound = true;
+              }
+            }
+          }
+          if (!historyFound) {
+            let accumulatedCount = 0;
+            for (let s = 1; s < seasonNum; s++) accumulatedCount += seasonLengthMap.get(s) || 0;
+            let safeAccumulated = accumulatedCount;
+            if (safeAccumulated >= collectionLinks.length) {
+              const heuristicStart = (seasonNum - 1) * 12;
+              if (heuristicStart < collectionLinks.length) {
+                log2("info", `${logPrefix} [\u5408\u96C6\u5207\u7247] \u8D77\u70B9\u8D8A\u754C\u4FEE\u6B63: \u539F\u8BA1\u7B97 ${safeAccumulated} > Total ${collectionLinks.length}\uFF0C\u542F\u7528\u56DE\u9000\u4F30\u7B97 (S${seasonNum} -> Index ${heuristicStart})`);
+                safeAccumulated = Math.max(0, heuristicStart - 2);
+              }
+            }
+            if (safeAccumulated > 0 && safeAccumulated < collectionLinks.length) {
+              const nextStart = accumulatedCount + (seasonLengthMap.get(seasonNum) || 999);
+              const safeEnd = Math.min(nextStart, collectionLinks.length);
+              slicedList = collectionLinks.slice(safeAccumulated, safeEnd);
+              sliceStart = safeAccumulated;
+              const sideName = isPrimarySide ? `\u4E3B\u6E90[${currentPrimarySource}]` : `\u526F\u6E90[${secSource}]`;
+              log2("info", `${logPrefix} [\u5408\u96C6\u5207\u7247] \u68C0\u6D4B\u5230${sideName}\u4E3A\u5408\u96C6 (Target: S${seasonNum}): \u65E0\u5386\u53F2\u63A8\u65AD(Defensive Fallback)\uFF0C\u4FE1\u4EFB\u5730\u56FE\u5207\u81F3 ${safeAccumulated}~${safeEnd} (\u5171 ${slicedList.length} \u96C6) \u53C2\u4E0E\u5BF9\u9F50`);
+            } else log2("info", `${logPrefix} [\u5408\u96C6\u5207\u7247] \u653E\u5F03\u5207\u7247: \u8BA1\u7B97\u8D77\u70B9 ${safeAccumulated} \u8D85\u51FA\u8303\u56F4 (Total: ${collectionLinks.length})`);
+          }
+        } else if (seasonNum === 1) {
+          const s1Count = seasonLengthMap.get(1);
+          if (s1Count && s1Count < collectionLinks.length) {
+            slicedList = collectionLinks.slice(0, s1Count);
+            const sideName = isPrimarySide ? `\u4E3B\u6E90[${currentPrimarySource}]` : `\u526F\u6E90[${secSource}]`;
+            log2("info", `${logPrefix} [\u5408\u96C6\u5207\u7247] \u68C0\u6D4B\u5230${sideName}\u4E3A\u5408\u96C6 (Target: S1): \u4F7F\u7528 Index 0~${s1Count} \u53C2\u4E0E\u5BF9\u9F50`);
+          }
+        }
+        return { sliceStart, slicedList };
+      };
+      if (isPrimaryCollection && !isSecondaryCollection) {
+        const secSeason = getSeasonNumber(cachedMatch.animeTitle, cachedMatch.typeDescription);
+        const res = performSlicing(true, filteredPLinksWithIndex, secSeason);
+        activePLinks = res.slicedList;
+        sliceStartP = res.sliceStart;
+      } else if (!isPrimaryCollection && isSecondaryCollection) {
+        const pSeason = getSeasonNumber(pAnime.animeTitle, pAnime.typeDescription);
+        const res = performSlicing(false, filteredMLinksWithIndex, pSeason);
+        activeMLinks = res.slicedList;
+        sliceStartS = res.sliceStart;
+      }
+      const bestOffsetLocal = findBestAlignmentOffset(activePLinks, activeMLinks, seriesLangA, seriesLangB, currentPrimarySource, secSource, pAnime.animeTitle, cachedMatch.animeTitle);
+      const offset = bestOffsetLocal + sliceStartP - sliceStartS;
+      if (offset !== 0) log2("info", `${logPrefix} \u96C6\u6570\u81EA\u52A8\u5BF9\u9F50 (${secSource}): Offset=${offset} (P:${filteredPLinksWithIndex.length}, S:${filteredMLinksWithIndex.length})`);
       derivedAnime.animeId = generateSafeMergedId(derivedAnime.animeId, match.animeId, groupFingerprint);
       derivedAnime.bangumiId = String(derivedAnime.animeId);
       let mergedCount = 0;
@@ -5032,12 +5329,7 @@ async function processMergeTask(params) {
         const sourceLinkItem = filteredMLinksWithIndex[k];
         const sourceLink = sourceLinkItem.link;
         const sTitleShort = sourceLink.name || sourceLink.title || `Index ${k}`;
-        const orphanItem = {
-          link: sourceLink,
-          originalIndex: sourceLinkItem.originalIndex,
-          relativeIndex: pIndex,
-          info: null
-        };
+        const orphanItem = { link: sourceLink, originalIndex: sourceLinkItem.originalIndex, relativeIndex: pIndex, info: null };
         const cleanTitleS = getTempTitle(sourceLink.title, redundantS);
         orphanItem.info = extractEpisodeInfo(cleanTitleS, secSource);
         if (epFilter && epFilter.test(sTitleShort)) {
@@ -5072,9 +5364,7 @@ async function processMergeTask(params) {
           let currentUrl = targetLink.url;
           const secPart = `${secSource}:${idB}`;
           if (!currentUrl.includes(MERGE_DELIMITER)) {
-            if (!currentUrl.startsWith(currentPrimarySource + ":")) {
-              currentUrl = `${currentPrimarySource}:${currentUrl}`;
-            }
+            if (!currentUrl.startsWith(currentPrimarySource + ":")) currentUrl = `${currentPrimarySource}:${currentUrl}`;
           }
           const newMergedUrl = `${currentUrl}${MERGE_DELIMITER}${secPart}`;
           let newMergedTitle = targetLink.title;
@@ -5084,10 +5374,7 @@ async function processMergeTask(params) {
               const sMatch = sourceLink.title.match(/^【([^】\d]+)(?:\d*)】/);
               if (sMatch) sLabel = sMatch[1].trim();
             }
-            newMergedTitle = newMergedTitle.replace(
-              /^【([^】]+)】/,
-              (match2, content) => `\u3010${content}${DISPLAY_CONNECTOR}${sLabel}\u3011`
-            );
+            newMergedTitle = newMergedTitle.replace(/^【([^】]+)】/, (match2, content) => `\u3010${content}${DISPLAY_CONNECTOR}${sLabel}\u3011`);
           }
           mappingEntries.push({ idx: pIndex, text: `   [\u5339\u914D] ${pTitleShort} <-> ${sTitleShort}` });
           matchedPIndices.add(pIndex);
@@ -5107,7 +5394,8 @@ async function processMergeTask(params) {
         }
       }
       if (mergedCount > 0) {
-        if (isMergeRatioValid(mergedCount, filteredPLinksWithIndex.length, filteredMLinksWithIndex.length, currentPrimarySource, secSource)) {
+        const isAnyCollection = collectionAnimeIds.has(pAnime.animeId) || collectionAnimeIds.has(match.animeId);
+        if (isMergeRatioValid(mergedCount, filteredPLinksWithIndex.length, filteredMLinksWithIndex.length, currentPrimarySource, secSource, isAnyCollection)) {
           for (const mutation of pendingMutations) {
             const link = derivedAnime.links[mutation.linkIndex];
             link.url = mutation.newUrl;
@@ -5119,32 +5407,47 @@ async function processMergeTask(params) {
             log2("info", `${logPrefix} [${secSource}] \u6620\u5C04\u8BE6\u60C5:
 ${mappingEntries.map((e) => e.text).join("\n")}`);
           }
-          stitchUnmatchedEpisodes(derivedAnime, orphanedEpisodes, secSource);
-          groupConsumedIds.add(match.animeId);
+          if (collectionProgress && isSecondaryCollection) {
+            let maxUsedIndex = -1;
+            for (let k = 0; k < filteredMLinksWithIndex.length; k++) {
+              const pIndex = k + offset;
+              if (matchedPIndices.has(pIndex)) {
+                const item = filteredMLinksWithIndex[k];
+                if (item.originalIndex > maxUsedIndex) maxUsedIndex = item.originalIndex;
+              }
+            }
+            if (maxUsedIndex !== -1) {
+              const pSeason = getSeasonNumber(pAnime.animeTitle, pAnime.typeDescription) || 1;
+              if (!collectionProgress.has(match.animeId)) collectionProgress.set(match.animeId, {});
+              const progress = collectionProgress.get(match.animeId);
+              if (mergedCount >= 3) {
+                progress[`S${pSeason}`] = maxUsedIndex;
+              }
+            }
+          }
+          if (collectionAnimeIds.has(match.animeId)) log2("info", `${logPrefix} [\u667A\u80FD\u8865\u5168] \u8DF3\u8FC7: \u526F\u6E90 [${secSource}] \u4E3A\u5408\u96C6\uFF0C\u4E3A\u907F\u514D\u6DF7\u5165\u5176\u4ED6\u5B63\u5EA6\u96C6\u6570\uFF0C\u4E0D\u6267\u884C\u8865\u5168\u3002`);
+          else stitchUnmatchedEpisodes(derivedAnime, orphanedEpisodes, secSource);
+          const normals = [], sinkers = [];
+          derivedAnime.links.forEach((link) => {
+            const rawContent = link.title.replace(RegexStore.Clean.SOURCE_TAG, "").trim();
+            if (RegexStore.Episode.SINK_TITLE_STRICT.test(rawContent)) sinkers.push(link);
+            else normals.push(link);
+          });
+          if (sinkers.length > 0) {
+            derivedAnime.links = [...normals, ...sinkers];
+            log2("info", `${logPrefix} [\u6392\u5E8F\u4F18\u5316] \u7ACB\u5373\u6267\u884C\u756A\u5916\u6C89\u5E95: \u79FB\u52A8\u4E86 ${sinkers.length} \u4E2A\u756A\u5916\u96C6\u5230\u672B\u5C3E`);
+          }
+          if (!collectionAnimeIds.has(match.animeId)) groupConsumedIds.add(match.animeId);
+          else log2("info", `${logPrefix} \u5408\u96C6\u4FDD\u7559: [${secSource}] ${logTitleB} \u662F\u5408\u96C6\uFF0C\u4FDD\u7559\u4EE5\u4F9B\u540C\u7EC4\u590D\u7528\u3002`);
           globalConsumedIds.add(match.animeId);
           hasMergedAny = true;
           actualMergedSources.push(secSource);
           contentSignatureParts.push(match.animeId);
-        } else {
-          log2("info", `${logPrefix} \u5173\u8054\u53D6\u6D88: [${currentPrimarySource}] ${logTitleA} <-> [${secSource}] ${logTitleB} (\u5339\u914D\u7387\u8FC7\u4F4E: ${mergedCount}/${Math.max(filteredPLinksWithIndex.length, filteredMLinksWithIndex.length)})`);
-        }
+        } else log2("info", `${logPrefix} \u5173\u8054\u53D6\u6D88: [${currentPrimarySource}] ${logTitleA} <-> [${secSource}] ${logTitleB} (\u5339\u914D\u7387\u8FC7\u4F4E: ${mergedCount}/${Math.max(filteredPLinksWithIndex.length, filteredMLinksWithIndex.length)})`);
       }
     }
   }
   if (hasMergedAny) {
-    const normals = [];
-    const sinkers = [];
-    derivedAnime.links.forEach((link) => {
-      if (RE_SPECIAL_SINK_TITLE.test(cleanText(link.title).replace(RE_SOURCE_TAG, "")) && RE_DANDAN_TAG.test(link.title)) {
-        sinkers.push(link);
-      } else {
-        normals.push(link);
-      }
-    });
-    if (sinkers.length > 0) {
-      derivedAnime.links = [...normals, ...sinkers];
-      log2("info", `${logPrefix} \u6267\u884C\u756A\u5916\u6C89\u5E95\u6392\u5E8F: \u79FB\u52A8\u4E86 ${sinkers.length} \u4E2A dandan/animeko \u756A\u5916\u96C6\u5230\u672B\u5C3E`);
-    }
     const signature = contentSignatureParts.join("|");
     if (generatedSignatures.has(signature)) {
       log2("info", `${logPrefix} \u68C0\u6D4B\u5230\u91CD\u590D\u7684\u5408\u5E76\u7ED3\u679C (Signature: ${signature})\uFF0C\u5DF2\u81EA\u52A8\u9690\u53BB\u5197\u4F59\u6761\u76EE\u3002`);
@@ -5158,6 +5461,122 @@ ${mappingEntries.map((e) => e.text).join("\n")}`);
   }
   return null;
 }
+function detectCollectionCandidates(curAnimes) {
+  const collectionIds = /* @__PURE__ */ new Set();
+  if (!curAnimes || curAnimes.length === 0) return collectionIds;
+  const cnNums = { "\u4E00": "1", "\u4E8C": "2", "\u4E09": "3", "\u56DB": "4", "\u4E94": "5", "\u516D": "6", "\u4E03": "7", "\u516B": "8", "\u4E5D": "9", "\u5341": "10" };
+  const groups = /* @__PURE__ */ new Map();
+  curAnimes.forEach((anime) => {
+    const realAnime = globals.animes.find((a) => String(a.animeId) === String(anime.animeId)) || anime;
+    const markers = extractSeasonMarkers(realAnime.animeTitle, realAnime.typeDescription);
+    if (markers.has("MOVIE") || markers.has("OVA") || markers.has("SP") || markers.has("SEQUEL")) return;
+    let protectedTitle = simplized(anime.animeTitle || "");
+    const startBracketMatch = protectedTitle.match(/^(?:【|\[)(.+?)(?:】|\])/);
+    if (startBracketMatch) {
+      const content = startBracketMatch[1];
+      if (!/^(TV|剧场版|movie|film|anime|动漫|动画|AVC|HEVC|MP4|MKV)$/i.test(content)) {
+        protectedTitle = protectedTitle.replace(startBracketMatch[0], content + " ");
+      }
+    }
+    protectedTitle = protectedTitle.replace(/第([一二三四五六七八九十])季/g, (m, num) => `\u7B2C${cnNums[num]}\u5B63`);
+    let clean = protectedTitle.replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").replace(RegexStore.Clean.YEAR_TAG, "").replace(RegexStore.Clean.META_SUFFIX, "").replace(RegexStore.Lang.KEYWORDS_STRONG, "");
+    SUFFIX_SPECIFIC_MAP.forEach((m) => clean = clean.replace(m.regex, ""));
+    clean = clean.replace(RegexStore.Season.SUFFIX_AMBIGUOUS, "").replace(/(?:第|S)\d+(?:季|期|部)/gi, "").replace(/(?:Part|P)\s*\d+/gi, "").replace(/\s+/g, "").toLowerCase().trim();
+    if (!clean) return;
+    const category = getContentCategory(anime.animeTitle, realAnime.typeDescription, realAnime.source);
+    const groupKey = `${clean}|${category}`;
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push(anime);
+  });
+  for (const [groupKey, list] of groups.entries()) {
+    if (list.length < 2) continue;
+    const [baseTitle, category] = groupKey.split("|");
+    const itemDetails = list.map((a) => `   - [${a.source}] ${a.animeTitle}`).join("\n");
+    log2("info", `[Merge-Check] [\u5408\u96C6\u63A2\u6D4B] \u6B63\u5728\u68C0\u67E5\u5206\u7EC4: "${baseTitle}" [${category}] (\u5305\u542B ${list.length} \u4E2A\u6761\u76EE):
+${itemDetails}`);
+    const sourceStats = /* @__PURE__ */ new Map();
+    let groupGlobalMaxSeason = 0;
+    list.forEach((anime) => {
+      const realAnime = globals.animes.find((a) => String(a.animeId) === String(anime.animeId)) || anime;
+      const markers = extractSeasonMarkers(realAnime.animeTitle, realAnime.typeDescription);
+      let seasonNum = 1;
+      for (const m of markers) {
+        if (m.startsWith("S")) {
+          const num = parseInt(m.substring(1));
+          if (!isNaN(num)) seasonNum = num;
+        }
+      }
+      if (seasonNum === 1) {
+        const isSequel = markers.has("SEQUEL") || RegexStore.Season.SUFFIX_SEQUEL.test(realAnime.animeTitle);
+        const isAmbiguous = markers.has("AMBIGUOUS") || RegexStore.Season.SUFFIX_AMBIGUOUS.test(realAnime.animeTitle);
+        if (isSequel || isAmbiguous) {
+          seasonNum = 2;
+          log2("info", `[Merge-Check] [Detail] [${realAnime.source}] "${realAnime.animeTitle}" -> \u5224\u5B9A\u4E3A S2 (Reason: Sequel/Ambiguous Suffix)`);
+        }
+      }
+      if (seasonNum > groupGlobalMaxSeason) groupGlobalMaxSeason = seasonNum;
+      let validCount = 0;
+      if (realAnime.links) {
+        if (/^(dandan|animeko)$/i.test(realAnime.source)) {
+          validCount = realAnime.links.filter((l, idx) => {
+            const rawTitle = l.title || l.name || "";
+            const rawContent = rawTitle.replace(RegexStore.Clean.SOURCE_TAG, "").replace(RegexStore.Clean.FROM_SUFFIX, "").trim();
+            if (RegexStore.Episode.SPECIAL_CHECK.test(rawContent) || RegexStore.Episode.DANDAN_IGNORE.test(rawContent)) return false;
+            const t = cleanText(rawTitle);
+            if (RegexStore.Episode.SPECIAL_CHECK.test(t) || RegexStore.Episode.DANDAN_IGNORE.test(t)) return false;
+            if (RegexStore.Episode.MAP_EXCLUDE_KEYWORDS.test(rawContent) || RegexStore.Episode.MAP_EXCLUDE_KEYWORDS.test(rawTitle)) return false;
+            log2("info", `[Merge-Check] [Detail-Ep] [${realAnime.source}] \u4FDD\u7559: "${rawTitle}"`);
+            return true;
+          }).length;
+        } else validCount = realAnime.links.length;
+      }
+      if (!sourceStats.has(realAnime.source)) sourceStats.set(realAnime.source, { seasonCounts: {}, maxSeason: 0, s1Candidates: [] });
+      const stat = sourceStats.get(realAnime.source);
+      if (!stat.seasonCounts[seasonNum]) stat.seasonCounts[seasonNum] = 0;
+      stat.seasonCounts[seasonNum] += validCount;
+      if (seasonNum > stat.maxSeason) stat.maxSeason = seasonNum;
+      if (seasonNum === 1) stat.s1Candidates.push({ anime: realAnime, originalCount: validCount });
+    });
+    if (groupGlobalMaxSeason <= 1) continue;
+    const allSources = Array.from(sourceStats.keys());
+    for (const [source, stat] of sourceStats.entries()) {
+      if (stat.maxSeason > 1) continue;
+      let maxOtherS1 = 0;
+      let hasOtherSources = false;
+      for (const otherSource2 of allSources) {
+        if (otherSource2 === source) continue;
+        const otherStat = sourceStats.get(otherSource2);
+        if (otherStat.seasonCounts[1]) {
+          hasOtherSources = true;
+          if (otherStat.seasonCounts[1] > maxOtherS1) maxOtherS1 = otherStat.seasonCounts[1];
+        }
+      }
+      if (!hasOtherSources) continue;
+      const currentS1Total = stat.seasonCounts[1];
+      const threshold = maxOtherS1 + Thresholds.COLLECTION_DIFF;
+      const ratio = maxOtherS1 > 0 ? currentS1Total / maxOtherS1 : 0;
+      if (currentS1Total > threshold) {
+        if (ratio > Thresholds.COLLECTION_RATIO) {
+          log2("info", `[Merge-Check] [\u5408\u96C6\u63A2\u6D4B] \u62D2\u7EDD: [${source}] ${baseTitle} (Ratio too high: ${ratio.toFixed(2)} > ${Thresholds.COLLECTION_RATIO})`);
+          continue;
+        }
+        const giants = stat.s1Candidates.filter((c) => c.originalCount > threshold);
+        if (giants.length > 0) {
+          giants.forEach((cand) => {
+            collectionIds.add(cand.anime.animeId);
+            log2("info", `[Merge-Check] [\u5408\u96C6\u63A2\u6D4B] \u53D1\u73B0\u7591\u4F3C\u5408\u96C6(\u5355\u4F53): [${source}] ${cand.anime.animeTitle} (Count:${cand.originalCount} > Thr:${threshold}, Ratio:${ratio.toFixed(2)}) -> \u6807\u8BB0\u4E3A\u5408\u96C6`);
+          });
+        } else {
+          stat.s1Candidates.forEach((cand) => {
+            collectionIds.add(cand.anime.animeId);
+            log2("info", `[Merge-Check] [\u5408\u96C6\u63A2\u6D4B] \u53D1\u73B0\u7591\u4F3C\u5408\u96C6(\u805A\u5408): [${source}] ${cand.anime.animeTitle} (TotalS1:${currentS1Total} > Thr:${threshold}, Ratio:${ratio.toFixed(2)}) -> \u6807\u8BB0\u4E3A\u5408\u96C6`);
+          });
+        }
+      } else log2("info", `[Merge-Check] [\u5408\u96C6\u63A2\u6D4B] \u672A\u547D\u4E2D: [${source}] ${baseTitle} (TotalS1:${currentS1Total} <= Threshold:${threshold})`);
+    }
+  }
+  return collectionIds;
+}
 async function applyMergeLogic(curAnimes) {
   const groups = globals.mergeSourcePairs;
   if (!groups || groups.length === 0) return;
@@ -5170,77 +5589,74 @@ async function applyMergeLogic(curAnimes) {
       epFilter = null;
     }
   }
+  const collectionAnimeIds = detectCollectionCandidates(curAnimes);
+  const collectionProgress = /* @__PURE__ */ new Map();
   const newMergedAnimes = [];
   const generatedSignatures = /* @__PURE__ */ new Set();
   const globalConsumedIds = /* @__PURE__ */ new Set();
+  const keepSources = /* @__PURE__ */ new Set();
+  groups.forEach((g) => {
+    if (g.secondaries.length === 0) keepSources.add(g.primary);
+  });
   for (const group of groups) {
-    const groupConsumedIds = /* @__PURE__ */ new Set();
+    if (group.secondaries.length === 0) continue;
+    const sourcePriorityMap = /* @__PURE__ */ new Map();
     const fullPriorityList = [group.primary, ...group.secondaries];
+    fullPriorityList.forEach((src, idx) => sourcePriorityMap.set(src, idx));
     const groupFingerprint = fullPriorityList.join("&");
-    for (let i = 0; i < fullPriorityList.length - 1; i++) {
-      const currentPrimarySource = fullPriorityList[i];
-      const availableSecondaries = fullPriorityList.slice(i + 1);
-      const allSourceItems = curAnimes.filter((a) => a.source === currentPrimarySource);
-      const activeRemainingSourcesCount = availableSecondaries.filter((secSrc) => {
-        return curAnimes.some((a) => a.source === secSrc && !groupConsumedIds.has(a.animeId));
-      }).length;
-      if (allSourceItems.length === 0) {
-        if (activeRemainingSourcesCount >= 1 && activeRemainingSourcesCount + (allSourceItems.length > 0 ? 1 : 0) >= 2) {
-          if (activeRemainingSourcesCount >= 2) {
-            log2("info", `[Merge] \u8F6E\u66FF: \u6E90 [${currentPrimarySource}] \u65E0\u53EF\u7528\u7ED3\u679C\uFF0C\u5C1D\u8BD5\u4E0B\u4E00\u987A\u4F4D.`);
-          }
-        }
-        continue;
+    const groupConsumedIds = /* @__PURE__ */ new Set();
+    const sortCandidates = (list, phaseName) => {
+      if (!list || list.length < 2) return list;
+      log2("info", `[Merge-Check] [Sort] ${phaseName} \u6392\u5E8F\u524D\u9996\u4E2A\u5143\u7D20: ${list[0].animeTitle}`);
+      list.sort((a, b) => {
+        const getMediaTypePriority = (anime) => {
+          const markers = extractSeasonMarkers(anime.animeTitle, anime.typeDescription);
+          if (markers.has("MOVIE")) return 2;
+          if (markers.has("OVA") || markers.has("SP")) return 2;
+          const strictType = getStrictMediaType(anime.animeTitle, anime.typeDescription);
+          if (strictType === "MOVIE") return 2;
+          return 1;
+        };
+        const typeA = getMediaTypePriority(a);
+        const typeB = getMediaTypePriority(b);
+        if (typeA !== typeB) return typeA - typeB;
+        const sA = getSeasonNumber(a.animeTitle, a.typeDescription) || 1;
+        const sB = getSeasonNumber(b.animeTitle, b.typeDescription) || 1;
+        if (sA !== sB) return sA - sB;
+        const pA = sourcePriorityMap.get(a.source);
+        const pB = sourcePriorityMap.get(b.source);
+        return pA - pB;
+      });
+      const debugOrder = list.map((a) => {
+        const sNum = getSeasonNumber(a.animeTitle, a.typeDescription) || 1;
+        const typeLabel = extractSeasonMarkers(a.animeTitle, a.typeDescription).has("MOVIE") || getStrictMediaType(a.animeTitle, a.typeDescription) === "MOVIE" ? "Movie" : `S${sNum}`;
+        return `[${typeLabel}] [${a.source}] ${a.animeTitle}`;
+      });
+      log2("info", `[Merge-Check] [Sort] ${phaseName} \u6267\u884C\u987A\u5E8F:
+   ${debugOrder.join("\n   ")}`);
+      return list;
+    };
+    const cnCandidates = [];
+    fullPriorityList.forEach((source) => {
+      const items = curAnimes.filter((a) => a.source === source && !globalConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === "CN");
+      items.forEach((item) => cnCandidates.push(item));
+    });
+    let hasCnInSecondaries = false;
+    for (const secSrc of fullPriorityList) {
+      if (curAnimes.some((a) => a.source === secSrc && !globalConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === "CN")) {
+        hasCnInSecondaries = true;
+        break;
       }
-      const validPrimaryItems = allSourceItems.filter((a) => !groupConsumedIds.has(a.animeId));
-      if (validPrimaryItems.length === 0) continue;
-      const hasCnInPrimary = validPrimaryItems.some((a) => getLanguageType(a.animeTitle) === "CN");
-      let enableCnIsolation = false;
-      if (hasCnInPrimary) {
-        for (const secSrc of availableSecondaries) {
-          const secItems = curAnimes.filter((a) => a.source === secSrc && !groupConsumedIds.has(a.animeId));
-          if (secItems.some((a) => getLanguageType(a.animeTitle) === "CN")) {
-            enableCnIsolation = true;
-            break;
-          }
-        }
-      }
-      if (enableCnIsolation) {
-        const cnPrimaries = validPrimaryItems.filter((a) => getLanguageType(a.animeTitle) === "CN");
-        if (cnPrimaries.length > 0) {
-          log2("info", `[Merge] \u542F\u52A8 CN \u9694\u79BB\u903B\u8F91: \u68C0\u6D4B\u5230 [${currentPrimarySource}] \u5305\u542B ${cnPrimaries.length} \u4E2A CN \u8D44\u6E90\uFF0C\u5C06\u4F18\u5148\u5339\u914D CN \u526F\u6E90\u3002`);
-          for (const pAnime of cnPrimaries) {
-            const resultAnime = await processMergeTask({
-              pAnime,
-              availableSecondaries,
-              curAnimes,
-              groupConsumedIds,
-              globalConsumedIds,
-              generatedSignatures,
-              epFilter,
-              groupFingerprint,
-              currentPrimarySource,
-              logPrefix: `[Merge][Phase 1: CN-Isolation]`,
-              limitSecondaryLang: "CN"
-            });
-            if (resultAnime) {
-              newMergedAnimes.push(resultAnime);
-              groupConsumedIds.add(pAnime.animeId);
-              globalConsumedIds.add(pAnime.animeId);
-            }
-          }
-        }
-      }
-      let remainingPrimaryItems = allSourceItems.filter((a) => !groupConsumedIds.has(a.animeId));
-      if (remainingPrimaryItems.length > 1) {
-        remainingPrimaryItems.sort((a, b) => {
-          const isCnA = getLanguageType(a.animeTitle) === "CN";
-          const isCnB = getLanguageType(b.animeTitle) === "CN";
-          if (isCnA === isCnB) return 0;
-          return isCnA ? 1 : -1;
-        });
-      }
-      for (const pAnime of remainingPrimaryItems) {
+    }
+    if (cnCandidates.length > 0 && hasCnInSecondaries) {
+      log2("info", `[Merge] [Phase 1] \u542F\u52A8 CN \u9694\u79BB\u7B56\u7565: \u5305\u542B ${cnCandidates.length} \u4E2A CN \u8D44\u6E90\u3002`);
+      sortCandidates(cnCandidates, "Phase 1");
+      for (const pAnime of cnCandidates) {
+        if (groupConsumedIds.has(pAnime.animeId)) continue;
+        if (globalConsumedIds.has(pAnime.animeId)) continue;
+        const currentPriorityIdx = sourcePriorityMap.get(pAnime.source);
+        const availableSecondaries = fullPriorityList.slice(currentPriorityIdx + 1);
+        if (availableSecondaries.length === 0) continue;
         const resultAnime = await processMergeTask({
           pAnime,
           availableSecondaries,
@@ -5250,8 +5666,100 @@ async function applyMergeLogic(curAnimes) {
           generatedSignatures,
           epFilter,
           groupFingerprint,
-          currentPrimarySource,
-          logPrefix: `[Merge][Phase 2: Standard]`
+          currentPrimarySource: pAnime.source,
+          logPrefix: `[Merge][Phase 1: CN-Strict]`,
+          limitSecondaryLang: "CN",
+          collectionAnimeIds,
+          collectionProgress
+        });
+        if (resultAnime) {
+          newMergedAnimes.push(resultAnime);
+          groupConsumedIds.add(pAnime.animeId);
+          globalConsumedIds.add(pAnime.animeId);
+        }
+      }
+    }
+    const secondaryCnCandidates = [];
+    for (let i = 1; i < fullPriorityList.length; i++) {
+      const source = fullPriorityList[i];
+      const items = curAnimes.filter((a) => a.source === source && !globalConsumedIds.has(a.animeId) && getLanguageType(a.animeTitle) === "CN");
+      items.forEach((item) => secondaryCnCandidates.push(item));
+    }
+    if (secondaryCnCandidates.length >= 2) {
+      log2("info", `[Merge] [Phase 1.5] \u542F\u52A8\u526F\u6E90 CN \u81EA\u7EC4\u7EC7: \u68C0\u6D4B\u5230 ${secondaryCnCandidates.length} \u4E2A\u5269\u4F59 CN \u8D44\u6E90\u3002`);
+      sortCandidates(secondaryCnCandidates, "Phase 1.5");
+      for (const tAnime of secondaryCnCandidates) {
+        if (groupConsumedIds.has(tAnime.animeId)) continue;
+        if (globalConsumedIds.has(tAnime.animeId)) continue;
+        const currentPriorityIdx = sourcePriorityMap.get(tAnime.source);
+        const availableSecondaries = fullPriorityList.slice(currentPriorityIdx + 1);
+        if (availableSecondaries.length === 0) continue;
+        const resultAnime = await processMergeTask({
+          pAnime: tAnime,
+          availableSecondaries,
+          curAnimes,
+          groupConsumedIds,
+          globalConsumedIds,
+          generatedSignatures,
+          epFilter,
+          groupFingerprint,
+          currentPrimarySource: tAnime.source,
+          logPrefix: `[Merge][Phase 1.5: CN-Secondary]`,
+          limitSecondaryLang: "CN",
+          collectionAnimeIds,
+          collectionProgress
+        });
+        if (resultAnime) {
+          newMergedAnimes.push(resultAnime);
+          groupConsumedIds.add(tAnime.animeId);
+          globalConsumedIds.add(tAnime.animeId);
+        }
+      }
+    }
+    const remainingCandidates = [];
+    fullPriorityList.forEach((source) => {
+      const items = curAnimes.filter((a) => a.source === source && !globalConsumedIds.has(a.animeId));
+      items.forEach((item) => remainingCandidates.push(item));
+    });
+    if (remainingCandidates.length > 0) {
+      log2("info", `[Merge] [Phase 2] \u542F\u52A8\u6807\u51C6\u56DE\u9000\u5339\u914D: \u5269\u4F59 ${remainingCandidates.length} \u4E2A\u8D44\u6E90\u3002`);
+      sortCandidates(remainingCandidates, "Phase 2");
+      for (const pAnime of remainingCandidates) {
+        if (groupConsumedIds.has(pAnime.animeId)) continue;
+        if (globalConsumedIds.has(pAnime.animeId)) continue;
+        const currentPriorityIdx = sourcePriorityMap.get(pAnime.source);
+        const availableSecondaries = fullPriorityList.slice(currentPriorityIdx + 1);
+        if (availableSecondaries.length === 0) continue;
+        const markers = extractSeasonMarkers(pAnime.animeTitle, pAnime.typeDescription);
+        const hasPart = Array.from(markers).some((m) => m.startsWith("P"));
+        let allowReuseIds = null;
+        if (hasPart) {
+          allowReuseIds = /* @__PURE__ */ new Set();
+          const pSeasonNum = getSeasonNumber(pAnime.animeTitle, pAnime.typeDescription) || 1;
+          for (const consumedId of globalConsumedIds) {
+            const consumedAnime = globals.animes.find((a) => String(a.animeId) === String(consumedId));
+            if (!consumedAnime) continue;
+            if (!availableSecondaries.includes(consumedAnime.source)) continue;
+            const secMarkers = extractSeasonMarkers(consumedAnime.animeTitle, consumedAnime.typeDescription);
+            if (Array.from(secMarkers).some((m) => m.startsWith("P"))) continue;
+            const sSeasonNum = getSeasonNumber(consumedAnime.animeTitle, consumedAnime.typeDescription) || 1;
+            if (pSeasonNum === sSeasonNum) allowReuseIds.add(consumedAnime.animeId);
+          }
+        }
+        const resultAnime = await processMergeTask({
+          pAnime,
+          availableSecondaries,
+          curAnimes,
+          groupConsumedIds,
+          globalConsumedIds,
+          generatedSignatures,
+          epFilter,
+          groupFingerprint,
+          currentPrimarySource: pAnime.source,
+          logPrefix: `[Merge][Phase 2: Standard]`,
+          collectionAnimeIds,
+          allowReuseIds,
+          collectionProgress
         });
         if (resultAnime) {
           newMergedAnimes.push(resultAnime);
@@ -5262,18 +5770,19 @@ async function applyMergeLogic(curAnimes) {
     }
   }
   if (newMergedAnimes.length > 0) {
-    for (const anime of newMergedAnimes) {
-      addAnime(anime);
-    }
+    for (const anime of newMergedAnimes) addAnime(anime);
     curAnimes.unshift(...newMergedAnimes);
+  }
+  if (keepSources.size > 0) {
+    for (const anime of curAnimes) {
+      if (globalConsumedIds.has(anime.animeId) && keepSources.has(anime.source)) globalConsumedIds.delete(anime.animeId);
+    }
   }
   for (let i = curAnimes.length - 1; i >= 0; i--) {
     const item = curAnimes[i];
-    if (item._isMerged || globalConsumedIds.has(item.animeId)) {
-      curAnimes.splice(i, 1);
-    }
+    if (item._isMerged || globalConsumedIds.has(item.animeId)) curAnimes.splice(i, 1);
   }
-  log2("info", `[Merge] \u5408\u5E76\u5B8C\u6210\uFF0C\u6700\u7EC8\u5217\u8868\u6570\u91CF: ${curAnimes.length}`);
+  log2("info", `[Merge] \u5408\u5E76\u6267\u884C\u5B8C\u6BD5\uFF0C\u6700\u7EC8\u5217\u8868\u6570\u91CF: ${curAnimes.length}`);
 }
 function mergeDanmakuList(listA, listB) {
   const final = [...listA || [], ...listB || []];
@@ -5286,10 +5795,109 @@ function mergeDanmakuList(listA, listB) {
     }
     return 0;
   };
-  final.sort((a, b) => {
-    return getTime(a) - getTime(b);
-  });
+  final.sort((a, b) => getTime(a) - getTime(b));
   return final;
+}
+function alignSourceTimelines(results, sourceNames, realIds, minMatchRatio = 0.8, offsetThreshold = 3) {
+  const dandanIndex = sourceNames.findIndex((name) => name === "dandan");
+  if (dandanIndex === -1 || !results[dandanIndex] || results[dandanIndex].length === 0) {
+    log2("info", "[Merge][AlignTimeline] \u65E0 dandan \u6E90\u6216\u65E0\u6570\u636E\uFF0C\u8DF3\u8FC7\u65F6\u95F4\u8F74\u5BF9\u9F50");
+    return results;
+  }
+  const dandanMap = /* @__PURE__ */ new Map();
+  for (const danmu of results[dandanIndex]) {
+    const text = normalizeText(getDanmuText(danmu));
+    if (!text) continue;
+    const time = getDanmuTime(danmu);
+    if (!dandanMap.has(text) || time < dandanMap.get(text)) {
+      dandanMap.set(text, time);
+    }
+  }
+  for (let idx = 0; idx < results.length; idx++) {
+    const sourceName = sourceNames[idx];
+    const realId = realIds[idx];
+    const list = results[idx];
+    if (sourceName === "dandan" || !Array.isArray(list) || list.length === 0) {
+      continue;
+    }
+    const sourceMap = /* @__PURE__ */ new Map();
+    const parsedCache = new Array(list.length);
+    for (let i = 0; i < list.length; i++) {
+      const danmu = list[i];
+      const text = normalizeText(getDanmuText(danmu));
+      const time = getDanmuTime(danmu);
+      parsedCache[i] = { danmu, text, time };
+      if (text && (!sourceMap.has(text) || time < sourceMap.get(text))) {
+        sourceMap.set(text, time);
+      }
+    }
+    if (sourceMap.size === 0) continue;
+    const offsetCounts = /* @__PURE__ */ new Map();
+    let matchCount = 0;
+    for (const [text, sourceTime] of sourceMap) {
+      if (dandanMap.has(text)) {
+        const dandanTime = dandanMap.get(text);
+        const offset = Math.round((sourceTime - dandanTime) * 100) / 100;
+        offsetCounts.set(offset, (offsetCounts.get(offset) || 0) + 1);
+        matchCount++;
+      }
+    }
+    const matchRatio = matchCount / sourceMap.size;
+    if (matchRatio < minMatchRatio) {
+      log2("info", `[Merge][AlignTimeline] ${sourceName}:${realId} \u5339\u914D\u7387\u8FC7\u4F4E (${(matchRatio * 100).toFixed(1)}% < ${(minMatchRatio * 100).toFixed(1)}%)\uFF0C\u8DF3\u8FC7\u65F6\u95F4\u8F74\u5BF9\u9F50`);
+      continue;
+    }
+    let bestOffset = 0;
+    let maxCount = 0;
+    for (const [offset, count] of offsetCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        bestOffset = offset;
+      }
+    }
+    if (Math.abs(bestOffset) < offsetThreshold) {
+      log2("info", `[Merge][AlignTimeline] ${sourceName}:${realId} \u6700\u4F73\u504F\u79FB\u91CF ${bestOffset}s \u8FC7\u5C0F\uFF0C\u8DF3\u8FC7\u65F6\u95F4\u8F74\u5BF9\u9F50`);
+      continue;
+    }
+    log2("info", `[Merge][AlignTimeline] ${sourceName}:${realId} \u5E94\u7528\u65F6\u95F4\u8F74\u504F\u79FB ${bestOffset}s\uFF08\u5339\u914D\u7387: ${(matchRatio * 100).toFixed(1)}%\uFF0C${maxCount} \u7968\uFF09`);
+    for (let i = 0; i < parsedCache.length; i++) {
+      const { danmu, text, time } = parsedCache[i];
+      const targetTime = text && dandanMap.has(text) ? dandanMap.get(text) : Math.max(0, time - bestOffset);
+      if (danmu.p && typeof danmu.p === "string") {
+        const firstComma = danmu.p.indexOf(",");
+        if (firstComma !== -1) {
+          danmu.p = targetTime.toFixed(2) + danmu.p.substring(firstComma);
+        }
+      }
+      if (danmu.t !== void 0 && danmu.t !== null) {
+        danmu.t = targetTime;
+      }
+      if (typeof danmu.progress === "number") {
+        danmu.progress = Math.round(targetTime * 1e3);
+      }
+    }
+  }
+  return results;
+}
+function getDanmuTime(danmu) {
+  if (danmu.t !== void 0 && danmu.t !== null) return Number(danmu.t);
+  if (danmu.p && typeof danmu.p === "string") {
+    const pTime = parseFloat(danmu.p.split(",")[0]);
+    if (!isNaN(pTime)) return pTime;
+  }
+  if (typeof danmu.progress === "number") {
+    return danmu.progress / 1e3;
+  }
+  return 0;
+}
+function getDanmuText(danmu) {
+  if (typeof danmu.m === "string") return danmu.m;
+  if (typeof danmu.content === "string") return danmu.content;
+  return "";
+}
+function normalizeText(text) {
+  if (typeof text !== "string") return "";
+  return text.replace(NORMALIZE_REGEX, "").toLowerCase();
 }
 
 // danmu_api/sources/base.js
@@ -5920,12 +6528,13 @@ var TmdbSource = class extends BaseSource {
 
 // danmu_api/sources/douban.js
 var DoubanSource = class extends BaseSource {
-  constructor(tencentSource2, iqiyiSource2, youkuSource2, bilibiliSource2) {
+  constructor(tencentSource2, iqiyiSource2, youkuSource2, bilibiliSource2, miguSource2) {
     super("BaseSource");
     this.tencentSource = tencentSource2;
     this.iqiyiSource = iqiyiSource2;
     this.youkuSource = youkuSource2;
     this.bilibiliSource = bilibiliSource2;
+    this.miguSource = miguSource2;
   }
   async search(keyword) {
     try {
@@ -6039,6 +6648,20 @@ var DoubanSource = class extends BaseSource {
               }
               break;
             }
+            case "miguvideo": {
+              let epId = null;
+              const decodeUrl = decodeURIComponent(vendor.uri);
+              const contentIdMatch = decodeUrl.match(/"contentID":"([^"]+)"/);
+              if (contentIdMatch && contentIdMatch[1]) {
+                epId = contentIdMatch[1];
+              }
+              if (epId) {
+                tmpAnimes[0].provider = "migu";
+                tmpAnimes[0].mediaId = `https://v3-sc.miguvideo.com/program/v4/cont/content-info/${epId}/1`;
+                await this.miguSource.handleAnimes(tmpAnimes, response.data?.title, doubanAnimes);
+              }
+              break;
+            }
           }
         }
         return results;
@@ -6057,76 +6680,284 @@ var DoubanSource = class extends BaseSource {
 };
 
 // danmu_api/sources/renren.js
+var CACHED_ALI_ID = null;
+var REQUEST_COUNT = 0;
+var ROTATION_THRESHOLD = 0;
 var RenrenSource = class extends BaseSource {
   constructor() {
-    super(...arguments);
+    super();
+    // API 配置常量
     __publicField(this, "API_CONFIG", {
       SECRET_KEY: "cf65GPholnICgyw1xbrpA79XVkizOdMq",
-      SEARCH_HOST: "api.qwdjapp.com",
-      DRAMA_HOST: "api.zhimeisj.top",
-      DANMU_HOST: "static-dm.qwdjapp.com",
-      APP_VERSION: "10.31.2",
-      USER_AGENT: "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/143.0.7499.146 Mobile Safari/537.36 App/RRSPApp platform/android AppVersion/10.31.2"
+      // TV 端接口配置
+      TV_HOST: "api.gorafie.com",
+      TV_DANMU_HOST: "static-dm.qwdjapp.com",
+      TV_VERSION: "1.2.2",
+      TV_USER_AGENT: "okhttp/3.12.13",
+      TV_CLIENT_TYPE: "android_qwtv_RRSP",
+      TV_PKT: "rrmj",
+      // 网页版/旧版接口配置 (降级备用)
+      WEB_HOST: "api.rrmj.plus",
+      WEB_DANMU_HOST: "static-dm.rrmj.plus"
     });
+    this.isBatchMode = false;
   }
-  generateAppCommonHeaders(timestamp, sign, xCaSign = null) {
-    const headers = {
-      "User-Agent": this.API_CONFIG.USER_AGENT,
-      "deviceId": "T2%2Bjh%2FnHhJkWEzPnQT2E0%2FEw865FTT0uL%2BiBwRa2ZdM%3D",
-      "aliId": "aUzmLtnZIYoDAA9KyLdcLQpM",
-      "umId": "53e0f078fa8474ae7ba412f766989b54od",
-      "clientType": "android_rrsp_xb_XiaoMi",
+  /**
+   * 生成随机的 aliid
+   * 规律：24位长度，以 'aY' 开头，包含字母数字和 Base64 特殊字符
+   * 模拟抓包数据：aYN4D0XfSREDAJaw3UAjG33K
+   */
+  generateRandomAliId() {
+    const prefix = "aY";
+    const length = 24 - prefix.length;
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let result = prefix;
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+  /**
+   * 执行 ID 轮换/初始化
+   * 生成新的 ID，重置计数器，并随机生成下一次的轮换阈值
+   */
+  rotateAliId() {
+    const oldId = CACHED_ALI_ID;
+    CACHED_ALI_ID = this.generateRandomAliId();
+    REQUEST_COUNT = 0;
+    ROTATION_THRESHOLD = Math.floor(Math.random() * (60 - 30 + 1)) + 30;
+    if (oldId) {
+      log("info", `[Renren] AliID \u8F6E\u6362\u5B8C\u6210: ${oldId} -> ${CACHED_ALI_ID}`);
+    } else {
+      log("info", `[Renren] AliID \u521D\u59CB\u5316\u5B8C\u6210: ${CACHED_ALI_ID}`);
+    }
+    log("info", `[Renren] AliID \u4E0B\u6B21\u8F6E\u6362\u5C06\u5728 ${ROTATION_THRESHOLD} \u6B21\u64CD\u4F5C\u540E\u89E6\u53D1`);
+  }
+  /**
+   * 检查并增加计数 (核心逻辑)
+   * 负责监控使用次数，达到阈值时触发轮换
+   * 并在日志中明确输出 AliID 计数状态
+   */
+  checkAndIncrementUsage() {
+    if (!CACHED_ALI_ID) {
+      this.rotateAliId();
+    }
+    if (REQUEST_COUNT >= ROTATION_THRESHOLD) {
+      log("info", `[Renren] AliID \u89E6\u53D1\u9608\u503C (${REQUEST_COUNT}/${ROTATION_THRESHOLD})\uFF0C\u6B63\u5728\u8F6E\u6362 ID...`);
+      this.rotateAliId();
+    }
+    REQUEST_COUNT++;
+    log("info", `[Renren] AliID \u8BA1\u6570\u589E\u52A0: ${REQUEST_COUNT}/${ROTATION_THRESHOLD} (\u5F53\u524DID: ...${CACHED_ALI_ID.slice(-6)})`);
+  }
+  /**
+   * 获取有效的 aliid
+   * 根据 isBatchMode 决定是否增加计数
+   */
+  getAliId() {
+    if (!CACHED_ALI_ID) {
+      this.rotateAliId();
+    }
+    if (this.isBatchMode) {
+      return CACHED_ALI_ID;
+    }
+    this.checkAndIncrementUsage();
+    return CACHED_ALI_ID;
+  }
+  /**
+   * 生成 TV 端接口所需的请求头
+   * 处理签名、设备标识及版本控制字段
+   * @param {number} timestamp 当前时间戳
+   * @param {string} sign 接口签名
+   * @returns {Object} HTTP Headers
+   */
+  generateTvHeaders(timestamp, sign) {
+    const aliId = this.getAliId();
+    return {
+      "clientVersion": this.API_CONFIG.TV_VERSION,
+      "p": "Android",
+      "deviceid": "tWEtIN7JG2DTDkBBigvj6A%3D%3D",
+      // 固定设备指纹
+      "token": "",
+      // 必须为空字符串以通过校验
+      "aliid": aliId,
+      // 使用动态aliId
+      "umid": "",
+      // 必须为空字符串以通过校验
+      "clienttype": this.API_CONFIG.TV_CLIENT_TYPE,
+      "pkt": this.API_CONFIG.TV_PKT,
       "t": timestamp.toString(),
       "sign": sign,
       "isAgree": "1",
-      "cv": this.API_CONFIG.APP_VERSION,
-      "ct": "android_rrsp_xb_XiaoMi",
-      "pkt": "rrmj",
-      "p": "Android",
-      "wcode": "3",
       "et": "2",
-      "uet": "1",
-      "folding-screen": "1",
-      "Accept": "application/json",
       "Accept-Encoding": "gzip",
-      "Connection": "close"
+      "User-Agent": this.API_CONFIG.TV_USER_AGENT
     };
-    if (xCaSign) {
-      headers["x-ca-sign"] = xCaSign;
-      headers["x-ca-method"] = "1";
-    }
-    return headers;
   }
-  async searchAppContent(keyword, size = 15) {
+  /**
+   * 搜索剧集 (TV API)
+   * @param {string} keyword 搜索关键词
+   * @param {number} size 分页大小
+   * @returns {Array} 统一格式的搜索结果列表
+   */
+  async searchAppContent(keyword, size = 30) {
     try {
       const timestamp = Date.now();
-      const path2 = "/search/content";
+      const path2 = "/qwtv/search";
       const queryParams = {
-        keywords: keyword,
-        size,
-        search_after: "",
-        order: "match",
-        isAgeLimit: false
+        searchWord: keyword,
+        num: size,
+        searchNext: "",
+        well: "match"
       };
       const sign = generateSign(path2, timestamp, queryParams, this.API_CONFIG.SECRET_KEY);
       const queryString = Object.entries(queryParams).map(([k, v]) => `${k}=${encodeURIComponent(v === null || v === void 0 ? "" : String(v))}`).join("&");
-      const xCaSign = generateXCaSign(path2, timestamp, queryString, this.API_CONFIG.SECRET_KEY);
-      const headers = this.generateAppCommonHeaders(timestamp, sign, xCaSign);
-      headers["Host"] = this.API_CONFIG.SEARCH_HOST;
-      headers["Origin"] = "https://d.rrsp.com.cn";
-      headers["Referer"] = "https://d.rrsp.com.cn/";
-      const resp = await Widget.http.get(`https://${this.API_CONFIG.SEARCH_HOST}${path2}?${queryString}`, {
+      const headers = this.generateTvHeaders(timestamp, sign);
+      const url = `https://${this.API_CONFIG.TV_HOST}${path2}?${queryString}`;
+      const resp = await Widget.http.get(url, {
         headers,
         retries: 1
       });
-      if (!resp.data) return [];
-      if (resp?.data?.code === "0001") return [];
-      const list = resp?.data?.data?.searchDramaList || [];
+      if (!resp.data || resp.data.code !== "0000") {
+        log("info", `[Renren] TV\u641C\u7D22\u63A5\u53E3\u5F02\u5E38: code=${resp?.data?.code}, msg=${resp?.data?.msg}`);
+        return [];
+      }
+      const list = resp.data.data || [];
+      log("info", `[Renren] TV\u641C\u7D22\u8FD4\u56DE\u7ED3\u679C\u6570\u91CF: ${list.length}`);
       return list.map((item) => ({
         provider: "renren",
         mediaId: String(item.id),
         title: String(item.title || "").replace(/<[^>]+>/g, "").replace(/:/g, "\uFF1A"),
-        type: "tv_series",
+        type: item.classify || "Renren",
+        season: null,
+        year: item.year,
+        imageUrl: item.cover,
+        episodeCount: null,
+        // 列表页不返回总集数
+        currentEpisodeIndex: null
+      }));
+    } catch (error) {
+      log("info", "[Renren] searchAppContent error:", error.message);
+      return [];
+    }
+  }
+  /**
+   * 获取剧集详情 (TV API)
+   * @param {string} dramaId 剧集ID
+   * @param {string} episodeSid 单集ID (可选)
+   * @returns {Object} 详情数据对象
+   */
+  async getAppDramaDetail(dramaId, episodeSid = "") {
+    try {
+      const timestamp = Date.now();
+      const path2 = "/qwtv/drama/details";
+      const queryParams = {
+        isAgeLimit: "false",
+        seriesId: dramaId,
+        episodeId: episodeSid,
+        clarity: "HD",
+        caption: "0",
+        hevcOpen: "1"
+      };
+      const sign = generateSign(path2, timestamp, queryParams, this.API_CONFIG.SECRET_KEY);
+      const queryString = Object.entries(queryParams).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+      const headers = this.generateTvHeaders(timestamp, sign);
+      const resp = await Widget.http.get(`https://${this.API_CONFIG.TV_HOST}${path2}?${queryString}`, {
+        headers,
+        retries: 1
+      });
+      if (!resp || !resp.data) {
+        log("info", `[Renren] TV\u8BE6\u60C5\u63A5\u53E3\u7F51\u7EDC\u65E0\u54CD\u5E94\u6216\u6570\u636E\u4E3A\u7A7A: ID=${dramaId}`);
+        return null;
+      }
+      const resData = resp.data;
+      const msg = resData.msg || resData.message || "";
+      if (msg.includes("\u8BE5\u5267\u6682\u4E0D\u53EF\u64AD")) {
+        log("info", `[Renren] TV\u63A5\u53E3\u63D0\u793A'\u8BE5\u5267\u6682\u4E0D\u53EF\u64AD' (ID=${dramaId})\uFF0C\u89C6\u4E3A\u7EF4\u62A4\u4E2D\uFF0C\u89E6\u53D1Web\u964D\u7EA7`);
+        return null;
+      }
+      if (resData.code !== "0000") {
+        log("info", `[Renren] TV\u8BE6\u60C5\u63A5\u53E3\u8FD4\u56DE\u9519\u8BEF\u7801: ${resData.code}, msg=${msg} (ID=${dramaId})`);
+        return null;
+      }
+      if (!resData.data || !resData.data.episodeList || resData.data.episodeList.length === 0) {
+        log("info", `[Renren] TV\u8BE6\u60C5\u63A5\u53E3\u8FD4\u56DE\u6570\u636E\u7F3A\u5931\u5206\u96C6\u5217\u8868 (ID=${dramaId})\uFF0C\u5C1D\u8BD5Web\u964D\u7EA7`);
+        return null;
+      }
+      log("info", `[Renren] TV\u8BE6\u60C5\u83B7\u53D6\u6210\u529F: ID=${dramaId}, \u5305\u542B\u96C6\u6570=${resData.data.episodeList.length}`);
+      return resData;
+    } catch (error) {
+      log("info", "[Renren] getAppDramaDetail error:", error.message);
+      return null;
+    }
+  }
+  /**
+   * 获取单集弹幕 (TV API)
+   * 请求 static-dm.qwdjapp.com 获取全量弹幕数据
+   * @param {string} episodeSid 单集ID (支持复合ID自动解包)
+   * @returns {Array} 原始弹幕数据列表
+   */
+  async getAppDanmu(episodeSid) {
+    try {
+      const timestamp = Date.now();
+      let realEpisodeId = episodeSid;
+      if (String(episodeSid).includes("-")) {
+        realEpisodeId = String(episodeSid).split("-")[1];
+      }
+      const path2 = `/v1/produce/danmu/EPISODE/${realEpisodeId}`;
+      const queryParams = {};
+      const sign = generateSign(path2, timestamp, queryParams, this.API_CONFIG.SECRET_KEY);
+      const headers = this.generateTvHeaders(timestamp, sign);
+      const url = `https://${this.API_CONFIG.TV_DANMU_HOST}${path2}`;
+      const resp = await Widget.http.get(url, {
+        headers,
+        retries: 1
+      });
+      if (!resp.data) return null;
+      const data = autoDecode(resp.data);
+      if (Array.isArray(data)) return data;
+      if (data && data.data && Array.isArray(data.data)) return data.data;
+      return [];
+    } catch (error) {
+      log("info", "[Renren] getAppDanmu error:", error.message);
+      return null;
+    }
+  }
+  /**
+   * 执行网页版网络搜索 (降级逻辑)
+   */
+  async performNetworkSearch(keyword, { lockRef = null, lastRequestTimeRef = { value: 0 }, minInterval = 500 } = {}) {
+    try {
+      log("info", `[Renren] \u5C1D\u8BD5\u6267\u884C\u7F51\u9875\u7248\u641C\u7D22: ${keyword}`);
+      const url = `https://${this.API_CONFIG.WEB_HOST}/m-station/search/drama`;
+      const params = {
+        keywords: keyword,
+        size: 20,
+        order: "match",
+        search_after: "",
+        isExecuteVipActivity: true
+      };
+      if (lockRef) {
+        while (lockRef.value) await new Promise((r) => setTimeout(r, 50));
+        lockRef.value = true;
+      }
+      const now = Date.now();
+      const dt = now - lastRequestTimeRef.value;
+      if (dt < minInterval) await new Promise((r) => setTimeout(r, minInterval - dt));
+      const resp = await this.renrenRequest("GET", url, params);
+      lastRequestTimeRef.value = Date.now();
+      if (lockRef) lockRef.value = false;
+      if (!resp.data) {
+        log("info", "[Renren] \u7F51\u9875\u7248\u641C\u7D22\u65E0\u54CD\u5E94\u6570\u636E");
+        return [];
+      }
+      const decoded = autoDecode(resp.data);
+      const list = decoded?.data?.searchDramaList || [];
+      log("info", `[Renren] \u7F51\u9875\u7248\u641C\u7D22\u7ED3\u679C\u6570\u91CF: ${list.length}`);
+      return list.map((item) => ({
+        provider: "renren",
+        mediaId: String(item.id),
+        title: String(item.title || "").replace(/<[^>]+>/g, "").replace(/:/g, "\uFF1A"),
+        type: item.classify || "Renren",
         season: null,
         year: item.year,
         imageUrl: item.cover,
@@ -6134,96 +6965,245 @@ var RenrenSource = class extends BaseSource {
         currentEpisodeIndex: null
       }));
     } catch (error) {
-      const msg = String(error?.message || "");
-      const is418 = /status:\s*418\b/.test(msg);
-      if (is418) {
-        log("warn", "[Renren] /search/content \u88AB\u670D\u52A1\u7AEF\u62E6\u622A (418)\uFF0C\u5DF2\u964D\u7EA7\u4E3A\u5907\u7528\u641C\u7D22\u63A5\u53E3");
-        return [];
-      }
-      log("error", "[Renren] searchAppContent error:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
+      log("info", "[Renren] performNetworkSearch error:", error.message);
       return [];
     }
   }
-  async getAppDramaDetail(dramaId, episodeSid = "") {
-    try {
-      if (!episodeSid) episodeSid = generateRandomSid();
-      const timestamp = Date.now();
-      const path2 = "/app/drama/page";
-      const queryParams = {
-        isAgeLimit: false,
-        dramaId,
-        episodeSid,
-        quality: "SD",
-        subtitle: 3,
-        hsdrOpen: 1,
-        hevcOpen: 1,
-        tria4k: 1
-      };
-      const sign = generateSign(path2, timestamp, queryParams, this.API_CONFIG.SECRET_KEY);
-      const queryString = Object.entries(queryParams).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-      const headers = this.generateAppCommonHeaders(timestamp, sign);
-      headers["Host"] = this.API_CONFIG.DRAMA_HOST;
-      headers["ignore"] = "false";
-      const resp = await Widget.http.get(`https://${this.API_CONFIG.DRAMA_HOST}${path2}?${queryString}`, {
-        headers,
-        retries: 1
+  // =====================
+  // 标准接口实现 (BaseSource 抽象方法)
+  // =====================
+  async search(keyword) {
+    log("info", `[Renren] \u5F00\u59CB\u641C\u7D22: ${keyword}`);
+    const parsedKeyword = { title: keyword, season: null };
+    const searchTitle = parsedKeyword.title;
+    const searchSeason = parsedKeyword.season;
+    let allResults = [];
+    allResults = await this.searchAppContent(searchTitle);
+    if (allResults.length === 0) {
+      log("info", "[Renren] TV \u641C\u7D22\u65E0\u7ED3\u679C\uFF0C\u964D\u7EA7\u5230\u7F51\u9875\u63A5\u53E3");
+      const lock = { value: false };
+      const lastRequestTime = { value: 0 };
+      allResults = await this.performNetworkSearch(searchTitle, {
+        lockRef: lock,
+        lastRequestTimeRef: lastRequestTime,
+        minInterval: 400
       });
-      if (!resp.data) return null;
+    }
+    if (searchSeason == null) return allResults;
+    return allResults.filter((r) => r.season === searchSeason);
+  }
+  async getDetail(id) {
+    const resp = await this.getAppDramaDetail(String(id));
+    if (resp && resp.data) {
       return resp.data;
-    } catch (error) {
-      log("error", "[Renren] getAppDramaDetail error:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
+    }
+    log("info", `[Renren] TV\u8BE6\u60C5\u4E0D\u53EF\u7528\uFF0C\u5C1D\u8BD5\u8BF7\u6C42\u7F51\u9875\u7248\u63A5\u53E3 (ID=${id})`);
+    const url = `https://${this.API_CONFIG.WEB_HOST}/m-station/drama/page`;
+    const params = { hsdrOpen: 0, isAgeLimit: 0, dramaId: String(id), hevcOpen: 1 };
+    try {
+      const fallbackResp = await this.renrenRequest("GET", url, params);
+      if (!fallbackResp.data) return null;
+      const decoded = autoDecode(fallbackResp.data);
+      if (decoded && decoded.data) {
+        log("info", `[Renren] \u7F51\u9875\u7248\u8BE6\u60C5\u83B7\u53D6\u6210\u529F: \u5305\u542B\u96C6\u6570=${decoded.data.episodeList ? decoded.data.episodeList.length : 0}`);
+        return decoded.data;
+      }
+      return null;
+    } catch (e) {
+      log("info", `[Renren] \u7F51\u9875\u7248\u8BE6\u60C5\u8BF7\u6C42\u5931\u8D25: ${e.message}`);
       return null;
     }
   }
-  // ========== 弹幕API ==========
-  async getAppDanmu(episodeSid) {
+  async getEpisodes(id) {
+    log("info", `[Renren] \u6B63\u5728\u83B7\u53D6\u5206\u96C6\u4FE1\u606F: ID=${id}`);
+    const detail = await this.getDetail(id);
+    if (!detail) {
+      log("info", `[Renren] \u83B7\u53D6\u5206\u96C6\u5931\u8D25: \u8BE6\u60C5\u5BF9\u8C61\u4E3A\u7A7A ID=${id}`);
+      return [];
+    }
+    if (!detail.episodeList || !Array.isArray(detail.episodeList)) {
+      log("info", `[Renren] \u83B7\u53D6\u5206\u96C6\u5931\u8D25: episodeList \u5B57\u6BB5\u7F3A\u5931\u6216\u975E\u6570\u7EC4 ID=${id}`);
+      return [];
+    }
+    let episodes = [];
+    const seriesId = String(id);
+    detail.episodeList.forEach((ep, idx) => {
+      const epSid = String(ep.sid || "").trim();
+      if (!epSid) return;
+      const showTitle = ep.title ? String(ep.title) : `\u7B2C${String(ep.episodeNo || idx + 1).padStart(2, "0")}\u96C6`;
+      const compositeId = `${seriesId}-${epSid}`;
+      episodes.push({ sid: compositeId, order: ep.episodeNo || idx + 1, title: showTitle });
+    });
+    log("info", `[Renren] \u6210\u529F\u89E3\u6790\u5206\u96C6\u6570\u91CF: ${episodes.length} (ID=${id})`);
+    return episodes.map((e) => ({
+      provider: "renren",
+      episodeId: e.sid,
+      title: e.title,
+      episodeIndex: e.order,
+      url: null
+    }));
+  }
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes) {
+    const tmpAnimes = [];
+    if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
+      log("info", "[Renren] sourceAnimes is not a valid array");
+      return [];
+    }
+    this.isBatchMode = true;
     try {
-      const timestamp = Date.now();
-      const path2 = `/v1/produce/danmu/emo/EPISODE/${episodeSid}`;
-      const sign = generateSign(path2, timestamp, {}, this.API_CONFIG.SECRET_KEY);
-      const xCaSign = generateXCaSign(path2, timestamp, "", this.API_CONFIG.SECRET_KEY);
-      const headers = this.generateAppCommonHeaders(timestamp, sign, xCaSign);
-      headers["Host"] = this.API_CONFIG.DANMU_HOST;
-      const resp = await Widget.http.get(`https://${this.API_CONFIG.DANMU_HOST}${path2}`, {
-        headers,
-        retries: 1
-      });
-      if (!resp.data) return null;
-      return resp.data;
-    } catch (error) {
-      log("error", "[Renren] getAppDanmu error:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
-      return null;
+      await Promise.all(
+        sourceAnimes.filter((s) => titleMatches(s.title, queryTitle)).map(async (anime) => {
+          try {
+            const eps = await this.getEpisodes(anime.mediaId);
+            let links = [];
+            for (const ep of eps) {
+              links.push({
+                "name": ep.episodeIndex.toString(),
+                "url": ep.episodeId,
+                "title": `\u3010${ep.provider}\u3011 ${ep.title}`
+              });
+            }
+            if (links.length > 0) {
+              let transformedAnime = {
+                animeId: Number(anime.mediaId),
+                bangumiId: String(anime.mediaId),
+                animeTitle: `${anime.title}(${anime.year})\u3010${anime.type}\u3011from renren`,
+                type: anime.type,
+                typeDescription: anime.type,
+                imageUrl: anime.imageUrl,
+                startDate: generateValidStartDate(anime.year),
+                episodeCount: links.length,
+                rating: 0,
+                isFavorited: true,
+                source: "renren"
+              };
+              tmpAnimes.push(transformedAnime);
+              addAnime({ ...transformedAnime, links });
+              if (globals.animes.length > globals.MAX_ANIMES) {
+                removeEarliestAnime();
+              }
+            }
+          } catch (error) {
+            log("info", `[Renren] Error processing anime: ${error.message}`);
+          }
+        })
+      );
+    } finally {
+      this.isBatchMode = false;
+      this.checkAndIncrementUsage();
+    }
+    this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
+    return tmpAnimes;
+  }
+  async getEpisodeDanmu(id) {
+    let danmuList = await this.getAppDanmu(id);
+    if (!danmuList || danmuList.length === 0) {
+      log("info", "[Renren] TV \u5F39\u5E55\u63A5\u53E3\u5931\u8D25\u6216\u65E0\u6570\u636E\uFF0C\u5C1D\u8BD5\u964D\u7EA7\u7F51\u9875\u63A5\u53E3");
+      danmuList = await this.getWebDanmuFallback(id);
+    }
+    if (danmuList && Array.isArray(danmuList) && danmuList.length > 0) {
+      log("info", `[Renren] \u6210\u529F\u83B7\u53D6 ${danmuList.length} \u6761\u5F39\u5E55`);
+      return danmuList;
+    }
+    return [];
+  }
+  /**
+   * 获取网页版弹幕 (降级方法)
+   * 自动处理复合 ID 的解包
+   */
+  async getWebDanmuFallback(id) {
+    let realEpisodeId = id;
+    if (String(id).includes("-")) {
+      realEpisodeId = String(id).split("-")[1];
+    }
+    log("info", `[Renren] \u964D\u7EA7\u7F51\u9875\u7248\u5F39\u5E55\uFF0C\u4F7F\u7528 ID: ${realEpisodeId}`);
+    const ClientProfile = {
+      user_agent: "Mozilla/5.0",
+      origin: "https://rrsp.com.cn",
+      referer: "https://rrsp.com.cn/"
+    };
+    const url = `https://${this.API_CONFIG.WEB_DANMU_HOST}/v1/produce/danmu/EPISODE/${realEpisodeId}`;
+    const headers = {
+      "Accept": "application/json",
+      "User-Agent": ClientProfile.user_agent,
+      "Origin": ClientProfile.origin,
+      "Referer": ClientProfile.referer
+    };
+    try {
+      const fallbackResp = await this.renrenHttpGet(url, { headers });
+      if (!fallbackResp.data) return [];
+      const data = autoDecode(fallbackResp.data);
+      let list = [];
+      if (Array.isArray(data)) list = data;
+      else if (data?.data && Array.isArray(data.data)) list = data.data;
+      return list;
+    } catch (e) {
+      log("info", `[Renren] \u7F51\u9875\u7248\u5F39\u5E55\u964D\u7EA7\u5931\u8D25: ${e.message}`);
+      return [];
     }
   }
+  async getEpisodeDanmuSegments(id) {
+    return new SegmentListResponse({
+      "type": "renren",
+      "segmentList": [{
+        "type": "renren",
+        "segment_start": 0,
+        "segment_end": 3e4,
+        "url": id
+      }]
+    });
+  }
+  async getEpisodeSegmentDanmu(segment) {
+    return this.getEpisodeDanmu(segment.url);
+  }
+  // =====================
+  // 数据解析与签名工具
+  // =====================
+  /**
+   * 解析 RRSP 的 P 字段 (属性字符串)
+   * 格式: timestamp,mode,size,color,uid,cid...
+   * 使用安全数值转换，防止 NaN 污染导致数据被误去重
+   */
   parseRRSPPFields(pField) {
     const parts = String(pField).split(",");
-    const num = (i, cast, dft) => {
-      try {
-        return cast(parts[i]);
-      } catch {
-        return dft;
-      }
+    const safeNum = (val, parser, defaultVal) => {
+      if (val === void 0 || val === null || val === "") return defaultVal;
+      const res = parser(val);
+      return isNaN(res) ? defaultVal : res;
     };
-    const timestamp = num(0, parseFloat, 0);
-    const mode = num(1, (x) => parseInt(x, 10), 1);
-    const size = num(2, (x) => parseInt(x, 10), 25);
-    const color = num(3, (x) => parseInt(x, 10), 16777215);
+    const timestamp = safeNum(parts[0], parseFloat, 0);
+    const mode = safeNum(parts[1], (x) => parseInt(x, 10), 1);
+    const size = safeNum(parts[2], (x) => parseInt(x, 10), 25);
+    const color = safeNum(parts[3], (x) => parseInt(x, 10), 16777215);
     const userId = parts[6] || "";
     const contentId = parts[7] || `${timestamp}:${userId}`;
     return { timestamp, mode, size, color, userId, contentId };
   }
+  /**
+   * 格式化弹幕列表为标准模型
+   * 将原始 d/p 字段映射为系统内部对象
+   * 兼容处理 item.d 和 item.content 内容字段
+   */
+  formatComments(comments) {
+    return comments.map((item) => {
+      let text = String(item.d || "");
+      if (!text && item.content) text = String(item.content);
+      if (!text) return null;
+      if (item.p) {
+        const meta = this.parseRRSPPFields(item.p);
+        return {
+          cid: Number(meta.contentId) || 0,
+          p: `${meta.timestamp.toFixed(2)},${meta.mode},${meta.color},[renren]`,
+          m: text,
+          t: meta.timestamp
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  }
+  /**
+   * 生成网页版 API 签名
+   */
   generateSignature(method, aliId, ct, cv, timestamp, path2, sortedQuery, secret) {
     const signStr = `${method.toUpperCase()}
 aliId:${aliId}
@@ -6233,6 +7213,9 @@ t:${timestamp}
 ${path2}?${sortedQuery}`;
     return createHmacSha256(secret, signStr);
   }
+  /**
+   * 构建网页版带签名的请求头
+   */
   buildSignedHeaders({ method, url, params = {}, deviceId, token }) {
     const ClientProfile = {
       client_type: "web_pc",
@@ -6293,213 +7276,748 @@ ${path2}?${sortedQuery}`;
     });
     return resp;
   }
-  async performNetworkSearch(keyword, { lockRef = null, lastRequestTimeRef = { value: 0 }, minInterval = 500 } = {}) {
-    try {
-      const url = `https://api.rrmj.plus/m-station/search/drama`;
-      const params = {
-        keywords: keyword,
-        size: 20,
-        order: "match",
-        search_after: "",
-        isExecuteVipActivity: true
-      };
-      if (lockRef) {
-        while (lockRef.value) await new Promise((r) => setTimeout(r, 50));
-        lockRef.value = true;
-      }
-      const now = Date.now();
-      const dt = now - lastRequestTimeRef.value;
-      if (dt < minInterval) await new Promise((r) => setTimeout(r, minInterval - dt));
-      const resp = await this.renrenRequest("GET", url, params);
-      lastRequestTimeRef.value = Date.now();
-      if (lockRef) lockRef.value = false;
-      if (!resp.data) return [];
-      const decoded = autoDecode(resp.data);
-      const list = decoded?.data?.searchDramaList || [];
-      return list.map((item) => ({
-        provider: "renren",
-        mediaId: String(item.id),
-        title: String(item.title || "").replace(/<[^>]+>/g, "").replace(/:/g, "\uFF1A"),
-        type: "tv_series",
-        season: null,
-        year: item.year,
-        imageUrl: item.cover,
-        episodeCount: item.episodeTotal,
-        currentEpisodeIndex: null
-      }));
-    } catch (error) {
-      log("error", "[Renren] performNetworkSearch error:", {
-        message: error.message,
-        name: error.name,
-        stack: error.stack
-      });
-      return [];
-    }
-  }
-  async search(keyword) {
-    const parsedKeyword = { title: keyword, season: null };
-    const searchTitle = parsedKeyword.title;
-    const searchSeason = parsedKeyword.season;
-    let allResults = [];
-    if (allResults.length === 0) {
-      log("info", "[Renren] APP \u641C\u7D22\u65E0\u7ED3\u679C\uFF0C\u964D\u7EA7\u5230\u7F51\u9875\u63A5\u53E3");
-      const lock = { value: false };
-      const lastRequestTime = { value: 0 };
-      allResults = await this.performNetworkSearch(searchTitle, {
-        lockRef: lock,
-        lastRequestTimeRef: lastRequestTime,
-        minInterval: 400
-      });
-    }
-    if (searchSeason == null) return allResults;
-    return allResults.filter((r) => r.season === searchSeason);
-  }
-  async getDetail(id) {
-    const url = `https://api.rrmj.plus/m-station/drama/page`;
-    const params = { hsdrOpen: 0, isAgeLimit: 0, dramaId: String(id), hevcOpen: 1 };
-    const fallbackResp = await this.renrenRequest("GET", url, params);
-    if (!fallbackResp.data) return null;
-    const decoded = autoDecode(fallbackResp.data);
-    return decoded?.data || null;
-  }
-  async getEpisodes(id) {
-    const detail = await this.getDetail(id);
-    if (!detail || !detail.episodeList) return [];
-    let episodes = [];
-    detail.episodeList.forEach((ep, idx) => {
-      const sid = String(ep.sid || "").trim();
-      if (!sid) return;
-      const title = String(ep.title || `\u7B2C${String(idx + 1).padStart(2, "0")}\u96C6`);
-      episodes.push({ sid, order: idx + 1, title });
-    });
-    return episodes.map((e) => ({
-      provider: "renren",
-      episodeId: e.sid,
-      title: e.title,
-      episodeIndex: e.order,
-      url: null
-    }));
-  }
-  async handleAnimes(sourceAnimes, queryTitle, curAnimes) {
-    const tmpAnimes = [];
-    if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
-      log("error", "[Renren] sourceAnimes is not a valid array");
-      return [];
-    }
-    await Promise.all(
-      sourceAnimes.filter((s) => titleMatches(s.title, queryTitle)).map(async (anime) => {
-        try {
-          const eps = await this.getEpisodes(anime.mediaId);
-          let links = [];
-          for (const ep of eps) {
-            links.push({
-              "name": ep.episodeIndex.toString(),
-              "url": ep.episodeId,
-              "title": `\u3010${ep.provider}\u3011 ${ep.title}`
-            });
-          }
-          if (links.length > 0) {
-            let transformedAnime = {
-              animeId: Number(anime.mediaId),
-              bangumiId: String(anime.mediaId),
-              animeTitle: `${anime.title}(${anime.year})\u3010${anime.type}\u3011from renren`,
-              type: anime.type,
-              typeDescription: anime.type,
-              imageUrl: anime.imageUrl,
-              startDate: generateValidStartDate(anime.year),
-              episodeCount: links.length,
-              rating: 0,
-              isFavorited: true,
-              source: "renren"
-            };
-            tmpAnimes.push(transformedAnime);
-            addAnime({ ...transformedAnime, links });
-            if (globals.animes.length > globals.MAX_ANIMES) {
-              removeEarliestAnime();
-            }
-          }
-        } catch (error) {
-          log("error", `[Renren] Error processing anime: ${error.message}`);
-        }
-      })
-    );
-    this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return tmpAnimes;
-  }
-  async getEpisodeDanmu(id) {
-    const ClientProfile = {
-      user_agent: "Mozilla/5.0",
-      origin: "https://rrsp.com.cn",
-      referer: "https://rrsp.com.cn/"
-    };
-    const url = `https://static-dm.rrmj.plus/v1/produce/danmu/EPISODE/${id}`;
-    const headers = {
-      "Accept": "application/json",
-      "User-Agent": ClientProfile.user_agent,
-      "Origin": ClientProfile.origin,
-      "Referer": ClientProfile.referer
-    };
-    const fallbackResp = await this.renrenHttpGet(url, { headers });
-    if (!fallbackResp.data) return null;
-    const data = autoDecode(fallbackResp.data);
-    if (Array.isArray(data)) return data;
-    if (data?.data && Array.isArray(data.data)) return data.data;
-    return null;
-  }
-  async getEpisodeDanmuSegments(id) {
-    log("info", "[Renren] \u83B7\u53D6\u5F39\u5E55\u5206\u6BB5\u5217\u8868:", id);
-    return new SegmentListResponse({
-      "type": "renren",
-      "segmentList": [{
-        "type": "renren",
-        "segment_start": 0,
-        "segment_end": 3e4,
-        "url": id
-      }]
-    });
-  }
-  async getEpisodeSegmentDanmu(segment) {
-    return this.getEpisodeDanmu(segment.url);
-  }
-  formatComments(comments) {
-    return comments.map((item) => {
-      const text = String(item.d || "");
-      const meta = this.parseRRSPPFields(item.p);
-      return {
-        cid: Number(meta.contentId),
-        p: `${meta.timestamp.toFixed(2)},${meta.mode},${meta.color},[renren]`,
-        m: text,
-        t: meta.timestamp
-      };
-    });
-  }
 };
+
+// danmu_api/utils/hanjutv-util.js
+var HANJUTV_VERSION = "6.5.3";
+var HANJUTV_VC = "a_7980";
+var HANJUTV_UA = "HanjuTV/6.5.3 (Pixel 2 XL; Android 11; Scale/2.00)";
+var HANJUTV_UK_KEY = "f349wghhe784tqwh";
+var HANJUTV_UK_IV = "d3w8hf94fidk38lk";
+var HANJUTV_RESPONSE_SECRET = "34F9Q53w/HJW8E6Q";
+var UID_CHARSET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+var SBOX2 = [
+  99,
+  124,
+  119,
+  123,
+  242,
+  107,
+  111,
+  197,
+  48,
+  1,
+  103,
+  43,
+  254,
+  215,
+  171,
+  118,
+  202,
+  130,
+  201,
+  125,
+  250,
+  89,
+  71,
+  240,
+  173,
+  212,
+  162,
+  175,
+  156,
+  164,
+  114,
+  192,
+  183,
+  253,
+  147,
+  38,
+  54,
+  63,
+  247,
+  204,
+  52,
+  165,
+  229,
+  241,
+  113,
+  216,
+  49,
+  21,
+  4,
+  199,
+  35,
+  195,
+  24,
+  150,
+  5,
+  154,
+  7,
+  18,
+  128,
+  226,
+  235,
+  39,
+  178,
+  117,
+  9,
+  131,
+  44,
+  26,
+  27,
+  110,
+  90,
+  160,
+  82,
+  59,
+  214,
+  179,
+  41,
+  227,
+  47,
+  132,
+  83,
+  209,
+  0,
+  237,
+  32,
+  252,
+  177,
+  91,
+  106,
+  203,
+  190,
+  57,
+  74,
+  76,
+  88,
+  207,
+  208,
+  239,
+  170,
+  251,
+  67,
+  77,
+  51,
+  133,
+  69,
+  249,
+  2,
+  127,
+  80,
+  60,
+  159,
+  168,
+  81,
+  163,
+  64,
+  143,
+  146,
+  157,
+  56,
+  245,
+  188,
+  182,
+  218,
+  33,
+  16,
+  255,
+  243,
+  210,
+  205,
+  12,
+  19,
+  236,
+  95,
+  151,
+  68,
+  23,
+  196,
+  167,
+  126,
+  61,
+  100,
+  93,
+  25,
+  115,
+  96,
+  129,
+  79,
+  220,
+  34,
+  42,
+  144,
+  136,
+  70,
+  238,
+  184,
+  20,
+  222,
+  94,
+  11,
+  219,
+  224,
+  50,
+  58,
+  10,
+  73,
+  6,
+  36,
+  92,
+  194,
+  211,
+  172,
+  98,
+  145,
+  149,
+  228,
+  121,
+  231,
+  200,
+  55,
+  109,
+  141,
+  213,
+  78,
+  169,
+  108,
+  86,
+  244,
+  234,
+  101,
+  122,
+  174,
+  8,
+  186,
+  120,
+  37,
+  46,
+  28,
+  166,
+  180,
+  198,
+  232,
+  221,
+  116,
+  31,
+  75,
+  189,
+  139,
+  138,
+  112,
+  62,
+  181,
+  102,
+  72,
+  3,
+  246,
+  14,
+  97,
+  53,
+  87,
+  185,
+  134,
+  193,
+  29,
+  158,
+  225,
+  248,
+  152,
+  17,
+  105,
+  217,
+  142,
+  148,
+  155,
+  30,
+  135,
+  233,
+  206,
+  85,
+  40,
+  223,
+  140,
+  161,
+  137,
+  13,
+  191,
+  230,
+  66,
+  104,
+  65,
+  153,
+  45,
+  15,
+  176,
+  84,
+  187,
+  22
+];
+var INV_SBOX = (() => {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) table[SBOX2[i]] = i;
+  return table;
+})();
+var RCON2 = [0, 1, 2, 4, 8, 16, 32, 64, 128, 27, 54];
+function utf8Encode(text) {
+  if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(text);
+  return stringToUtf8Bytes(text);
+}
+function utf8Decode(bytes) {
+  if (typeof TextDecoder !== "undefined") return new TextDecoder().decode(bytes);
+  return utf8BytesToString(bytes);
+}
+function xorBytes(a, b) {
+  const out = new Uint8Array(a.length);
+  for (let i = 0; i < a.length; i++) out[i] = a[i] ^ b[i];
+  return out;
+}
+function pkcs7Pad(bytes, blockSize = 16) {
+  const remain = bytes.length % blockSize;
+  const padSize = remain === 0 ? blockSize : blockSize - remain;
+  const result = new Uint8Array(bytes.length + padSize);
+  result.set(bytes, 0);
+  result.fill(padSize, bytes.length);
+  return result;
+}
+function stripControlChars(text) {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+}
+function rotWord2(word) {
+  return Uint8Array.from([word[1], word[2], word[3], word[0]]);
+}
+function subWord2(word) {
+  return Uint8Array.from(word.map((b) => SBOX2[b]));
+}
+function keyExpansion2(key) {
+  const Nk = 4;
+  const Nb = 4;
+  const Nr = 10;
+  const w = new Array(Nb * (Nr + 1));
+  for (let i = 0; i < Nk; i++) {
+    w[i] = key.slice(4 * i, 4 * i + 4);
+  }
+  for (let i = Nk; i < Nb * (Nr + 1); i++) {
+    let temp = w[i - 1];
+    if (i % Nk === 0) {
+      temp = xorBytes(subWord2(rotWord2(temp)), Uint8Array.from([RCON2[i / Nk], 0, 0, 0]));
+    }
+    w[i] = xorBytes(w[i - Nk], temp);
+  }
+  return w;
+}
+function addRoundKey2(state, w, round) {
+  const out = new Uint8Array(16);
+  for (let c = 0; c < 4; c++) {
+    for (let r = 0; r < 4; r++) {
+      out[r + 4 * c] = state[r + 4 * c] ^ w[round * 4 + c][r];
+    }
+  }
+  return out;
+}
+function subBytes(state) {
+  return Uint8Array.from(state.map((b) => SBOX2[b]));
+}
+function invSubBytes2(state) {
+  return Uint8Array.from(state.map((b) => INV_SBOX[b]));
+}
+function shiftRows(state) {
+  const out = new Uint8Array(16);
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      out[r + 4 * c] = state[r + 4 * ((c + r) % 4)];
+    }
+  }
+  return out;
+}
+function invShiftRows2(state) {
+  const out = new Uint8Array(16);
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      out[r + 4 * c] = state[r + 4 * ((c - r + 4) % 4)];
+    }
+  }
+  return out;
+}
+function gfMul(a, b) {
+  let p = 0;
+  let aa = a;
+  let bb = b;
+  for (let i = 0; i < 8; i++) {
+    if (bb & 1) p ^= aa;
+    const hi = aa & 128;
+    aa = aa << 1 & 255;
+    if (hi) aa ^= 27;
+    bb >>= 1;
+  }
+  return p;
+}
+function mixColumns(state) {
+  const out = new Uint8Array(16);
+  for (let c = 0; c < 4; c++) {
+    const col = state.slice(4 * c, 4 * c + 4);
+    out[4 * c + 0] = gfMul(col[0], 2) ^ gfMul(col[1], 3) ^ col[2] ^ col[3];
+    out[4 * c + 1] = col[0] ^ gfMul(col[1], 2) ^ gfMul(col[2], 3) ^ col[3];
+    out[4 * c + 2] = col[0] ^ col[1] ^ gfMul(col[2], 2) ^ gfMul(col[3], 3);
+    out[4 * c + 3] = gfMul(col[0], 3) ^ col[1] ^ col[2] ^ gfMul(col[3], 2);
+  }
+  return out;
+}
+function invMixColumns2(state) {
+  const out = new Uint8Array(16);
+  for (let c = 0; c < 4; c++) {
+    const col = state.slice(4 * c, 4 * c + 4);
+    out[4 * c + 0] = gfMul(col[0], 14) ^ gfMul(col[1], 11) ^ gfMul(col[2], 13) ^ gfMul(col[3], 9);
+    out[4 * c + 1] = gfMul(col[0], 9) ^ gfMul(col[1], 14) ^ gfMul(col[2], 11) ^ gfMul(col[3], 13);
+    out[4 * c + 2] = gfMul(col[0], 13) ^ gfMul(col[1], 9) ^ gfMul(col[2], 14) ^ gfMul(col[3], 11);
+    out[4 * c + 3] = gfMul(col[0], 11) ^ gfMul(col[1], 13) ^ gfMul(col[2], 9) ^ gfMul(col[3], 14);
+  }
+  return out;
+}
+function aesEncryptBlock(input, w) {
+  let state = new Uint8Array(input);
+  state = addRoundKey2(state, w, 0);
+  for (let round = 1; round <= 9; round++) {
+    state = subBytes(state);
+    state = shiftRows(state);
+    state = mixColumns(state);
+    state = addRoundKey2(state, w, round);
+  }
+  state = subBytes(state);
+  state = shiftRows(state);
+  state = addRoundKey2(state, w, 10);
+  return state;
+}
+function aesDecryptBlock2(input, w) {
+  let state = new Uint8Array(input);
+  state = addRoundKey2(state, w, 10);
+  for (let round = 9; round >= 1; round--) {
+    state = invShiftRows2(state);
+    state = invSubBytes2(state);
+    state = addRoundKey2(state, w, round);
+    state = invMixColumns2(state);
+  }
+  state = invShiftRows2(state);
+  state = invSubBytes2(state);
+  state = addRoundKey2(state, w, 0);
+  return state;
+}
+function aesCbcEncryptPure(plainBytes, keyBytes, ivBytes) {
+  const padded = pkcs7Pad(plainBytes, 16);
+  const w = keyExpansion2(keyBytes);
+  const out = new Uint8Array(padded.length);
+  let prev = new Uint8Array(ivBytes);
+  for (let i = 0; i < padded.length; i += 16) {
+    const block = padded.slice(i, i + 16);
+    const mixed = xorBytes(block, prev);
+    const cipherBlock = aesEncryptBlock(mixed, w);
+    out.set(cipherBlock, i);
+    prev = cipherBlock;
+  }
+  return out;
+}
+function aesCbcDecryptPureNoUnpad(cipherBytes, keyBytes, ivBytes) {
+  if (cipherBytes.length % 16 !== 0) {
+    throw new Error(`\u5BC6\u6587\u957F\u5EA6\u4E0D\u662F16\u7684\u500D\u6570: ${cipherBytes.length}`);
+  }
+  const w = keyExpansion2(keyBytes);
+  const out = new Uint8Array(cipherBytes.length);
+  let prev = new Uint8Array(ivBytes);
+  for (let i = 0; i < cipherBytes.length; i += 16) {
+    const block = cipherBytes.slice(i, i + 16);
+    const plainBlock = xorBytes(aesDecryptBlock2(block, w), prev);
+    out.set(plainBlock, i);
+    prev = block;
+  }
+  return out;
+}
+async function aesCbcEncryptToBase64(plainText, key, iv) {
+  const keyBytes = utf8Encode(key);
+  const ivBytes = utf8Encode(iv);
+  const plainBytes = utf8Encode(plainText);
+  const cipherBytes = aesCbcEncryptPure(plainBytes, keyBytes, ivBytes);
+  return bytesToBase64(cipherBytes);
+}
+async function aesCbcDecryptBase64NoPadding(cipherBase64, key, iv) {
+  const keyBytes = utf8Encode(key);
+  const ivBytes = utf8Encode(iv);
+  const cipherBytes = base64ToBytes(cipherBase64);
+  const plainBytes = aesCbcDecryptPureNoUnpad(cipherBytes, keyBytes, ivBytes);
+  return utf8Decode(plainBytes);
+}
+function randomInt(max) {
+  if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(1);
+    globalThis.crypto.getRandomValues(bytes);
+    return bytes[0] % max;
+  }
+  return Math.floor(Math.random() * max);
+}
+function buildSearchSignPayload(uid, timestamp) {
+  return JSON.stringify({
+    emu: 0,
+    ou: 0,
+    it: timestamp,
+    iit: timestamp,
+    bs: 0,
+    uid,
+    pc: 0,
+    tm: 0,
+    d8m: "0,0,0,0,0,0,0,0",
+    md: "Pixel 2 XL",
+    maker: "Google",
+    osv: "11",
+    br: 100,
+    rpc: 0,
+    scc: 0,
+    plc: 0,
+    toc: 1,
+    tsc: 0,
+    ts: timestamp,
+    pa: 1,
+    nw: 2,
+    px: "0",
+    isp: "",
+    ai: "ccffc2520864efdb",
+    oa: "",
+    dpc: 0,
+    dsc: 0,
+    qpc: 0,
+    apad: 0,
+    pk: "com.babycloud.hanju"
+  });
+}
+function createHanjutvUid(length = 20) {
+  let uid = "";
+  for (let i = 0; i < length; i++) uid += UID_CHARSET[randomInt(UID_CHARSET.length)];
+  return uid;
+}
+async function createHanjutvSearchHeaders(uid, timestamp = Date.now()) {
+  const ts = Number(timestamp);
+  const uidMd5 = md5(uid);
+  const signPayload = buildSearchSignPayload(uid, ts);
+  const sign = await aesCbcEncryptToBase64(signPayload, uidMd5.slice(0, 16), uidMd5.slice(16, 32));
+  const uk = await aesCbcEncryptToBase64(uid, HANJUTV_UK_KEY, HANJUTV_UK_IV);
+  return {
+    app: "hj",
+    ch: "qq",
+    uk,
+    "auth-uid": "",
+    vn: HANJUTV_VERSION,
+    sign,
+    "User-Agent": HANJUTV_UA,
+    vc: HANJUTV_VC,
+    "auth-token": "",
+    "Accept-Encoding": "gzip",
+    Connection: "Keep-Alive"
+  };
+}
+async function decodeHanjutvEncryptedPayload(payload, uid = "") {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  if (typeof payload.data !== "string" || payload.data.length === 0) return payload;
+  const ts = payload.ts ?? "";
+  let key = typeof payload.key === "string" && payload.key ? payload.key : "";
+  if (!key && uid && ts !== "") key = md5(`${uid}${ts}`);
+  if (!key) throw new Error("\u7F3A\u5C11\u89E3\u5BC6 key\uFF0C\u4E14\u65E0\u6CD5\u901A\u8FC7 uid+ts \u63A8\u5BFC");
+  const mix = md5(`${key}${HANJUTV_RESPONSE_SECRET}`);
+  const aesKey = mix.slice(0, 16);
+  const iv = mix.slice(16, 32);
+  const plainText = await aesCbcDecryptBase64NoPadding(payload.data, aesKey, iv);
+  const cleanedText = stripControlChars(plainText).trim();
+  return JSON.parse(cleanedText);
+}
 
 // danmu_api/sources/hanjutv.js
 var HanjutvSource = class extends BaseSource {
+  constructor() {
+    super();
+    this.webHost = "https://hxqapi.hiyun.tv";
+    this.appHost = "https://hxqapi.hiyun.tv";
+    this.oldDanmuHost = "https://hxqapi.zmdcq.com";
+    this.defaultRefer = "2JGztvGjRVpkxcr0T4ZWG2k+tOlnHmDGUNMwAGSeq548YV2FMbs0h0bXNi6DJ00L";
+    this.webUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36";
+    this.appUserAgent = "HanjuTV/6.8 (23127PN0CC; Android 16; Scale/2.00)";
+  }
+  getWebHeaders() {
+    return {
+      "Content-Type": "application/json",
+      "User-Agent": this.webUserAgent
+    };
+  }
+  getAppHeaders() {
+    return {
+      vc: "a_8260",
+      vn: "6.8",
+      ch: "xiaomi",
+      app: "hj",
+      "User-Agent": this.appUserAgent,
+      "Accept-Encoding": "gzip"
+    };
+  }
+  normalizeSearchItems(items = []) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const sid = item.sid || item.seriesId || item.id || item.series_id;
+      const name = item.name || item.title || item.seriesName || item.showName;
+      if (!sid || !name) return null;
+      const imageObj = typeof item.image === "object" && item.image !== null ? item.image : {};
+      const thumb = imageObj.thumb || imageObj.poster || imageObj.url || item.thumb || item.poster || "";
+      return {
+        ...item,
+        sid: String(sid),
+        name: String(name),
+        image: {
+          ...imageObj,
+          thumb
+        }
+      };
+    }).filter(Boolean);
+  }
+  normalizeEpisodes(items = []) {
+    if (!Array.isArray(items)) return [];
+    return items.map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const pid = item.pid || item.id || item.programId || item.episodeId;
+      if (!pid) return null;
+      const serialCandidate = item.serialNo ?? item.serial_no ?? item.sort ?? item.sortNo ?? item.num ?? item.episodeNo ?? index + 1;
+      const serialNo = Number(serialCandidate);
+      return {
+        ...item,
+        pid: String(pid),
+        serialNo: Number.isFinite(serialNo) && serialNo > 0 ? serialNo : index + 1,
+        title: item.title || item.name || item.programName || item.episodeTitle || ""
+      };
+    }).filter(Boolean).sort((a, b) => a.serialNo - b.serialNo);
+  }
+  extractSearchItems(data) {
+    const list = data?.seriesData?.seriesList || data?.seriesList || [];
+    return this.normalizeSearchItems(list);
+  }
+  dedupeBySid(items = []) {
+    const map = /* @__PURE__ */ new Map();
+    for (const item of items) {
+      if (!item?.sid) continue;
+      const sid = String(item.sid);
+      if (!map.has(sid)) map.set(sid, item);
+    }
+    return Array.from(map.values());
+  }
+  countMatchedItems(items = [], keyword = "") {
+    if (!Array.isArray(items) || !keyword) return 0;
+    return items.reduce((count, item) => {
+      const name = item?.name ? String(item.name) : "";
+      return count + (titleMatches(name, keyword) ? 1 : 0);
+    }, 0);
+  }
+  mergeSearchCandidates(keyword, s5List = [], webList = []) {
+    const s5Candidates = this.dedupeBySid(s5List);
+    const webCandidates = this.dedupeBySid(webList);
+    const s5Matched = [];
+    const s5Unmatched = [];
+    for (const item of s5Candidates) {
+      if (titleMatches(item?.name || "", keyword)) s5Matched.push(item);
+      else s5Unmatched.push(item);
+    }
+    const webMatched = [];
+    const webUnmatched = [];
+    for (const item of webCandidates) {
+      if (titleMatches(item?.name || "", keyword)) webMatched.push(item);
+      else webUnmatched.push(item);
+    }
+    const hasMatched = s5Matched.length + webMatched.length > 0;
+    const orderedCandidates = hasMatched ? [...s5Matched, ...webMatched, ...s5Unmatched, ...webUnmatched] : [...s5Candidates, ...webCandidates];
+    const resultList = [];
+    const sidSet = /* @__PURE__ */ new Set();
+    for (const item of orderedCandidates) {
+      const sid = item?.sid ? String(item.sid) : "";
+      if (!sid || sidSet.has(sid)) continue;
+      sidSet.add(sid);
+      resultList.push(item);
+    }
+    const pluckNames = (list) => list?.map((item) => item.name) || [];
+    return {
+      resultList,
+      stats: {
+        s5Total: s5Candidates.length,
+        s5Matched: s5Matched.length,
+        webTotal: webCandidates.length,
+        webMatched: webMatched.length,
+        s5MatchedList: pluckNames(s5Matched),
+        s5UnmatchedList: pluckNames(s5Unmatched),
+        webMatchedList: pluckNames(webMatched),
+        webUnmatchedList: pluckNames(webUnmatched)
+      }
+    };
+  }
+  async searchWithS5Api(keyword) {
+    const uid = createHanjutvUid();
+    const headers = await createHanjutvSearchHeaders(uid);
+    const q = encodeURIComponent(keyword);
+    const resp = await Widget.http.get(`https://hxqapi.hiyun.tv/api/search/s5?k=${q}&srefer=search_input&type=0&page=1`, {
+      headers,
+      timeout: 1e4,
+      retries: 1
+    });
+    const payload = resp?.data;
+    if (!payload || typeof payload !== "object") {
+      throw new Error("s5 \u54CD\u5E94\u4E3A\u7A7A");
+    }
+    if (typeof payload.data === "string" && payload.data.length > 0) {
+      let decoded;
+      try {
+        decoded = await decodeHanjutvEncryptedPayload(payload, uid);
+      } catch (error) {
+        throw new Error(`s5 \u54CD\u5E94\u89E3\u5BC6\u5931\u8D25: ${error.message}`);
+      }
+      const items = this.extractSearchItems(decoded);
+      if (items.length === 0) throw new Error("s5 \u89E3\u5BC6\u540E\u65E0\u6709\u6548\u7ED3\u679C");
+      return items;
+    }
+    const plainItems = this.extractSearchItems(payload);
+    if (plainItems.length === 0) throw new Error("s5 \u65E0\u6709\u6548\u7ED3\u679C");
+    return plainItems;
+  }
+  async searchWithLegacyApi(keyword) {
+    const q = encodeURIComponent(keyword);
+    const resp = await Widget.http.get(`https://hxqapi.hiyun.tv/wapi/search/aggregate/search?keyword=${q}&scope=101&page=1`, {
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      },
+      timeout: 1e4,
+      retries: 1
+    });
+    return this.extractSearchItems(resp?.data);
+  }
   async search(keyword) {
     try {
-      const resp = await Widget.http.get(`https://hxqapi.hiyun.tv/wapi/search/aggregate/search?keyword=${keyword}&scope=101&page=1`, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+      const key = String(keyword || "").trim();
+      if (!key) return [];
+      let s5List = [];
+      let webList = [];
+      let s5Error = null;
+      try {
+        s5List = await this.searchWithS5Api(key);
+      } catch (error) {
+        s5Error = error;
+        log("warn", `[Hanjutv] s5 \u641C\u7D22\u5931\u8D25\uFF0C\u964D\u7EA7\u65E7\u63A5\u53E3: ${error.message}`);
+      }
+      const s5MatchedCount = this.countMatchedItems(s5List, key);
+      const needLegacySearch = s5List.length === 0 || s5MatchedCount === 0;
+      if (needLegacySearch) {
+        if (!s5Error && s5List.length > 0 && s5MatchedCount === 0) {
+          log("warn", `[Hanjutv] s5 \u8FD4\u56DE ${s5List.length} \u6761\u4F46\u6807\u9898\u96F6\u547D\u4E2D\uFF0C\u89E6\u53D1 legacy \u8865\u507F\u68C0\u7D22`);
         }
-      });
-      if (!resp || !resp.data) {
-        log("info", "hanjutvSearchresp: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
+        try {
+          webList = await this.searchWithLegacyApi(key);
+        } catch (error) {
+          log("warn", `[Hanjutv] \u65E7\u641C\u7D22\u63A5\u53E3\u5931\u8D25: ${error.message}`);
+        }
+      }
+      const { resultList, stats } = this.mergeSearchCandidates(key, s5List, webList);
+      if (resultList.length === 0) {
+        log("info", "hanjutvSearchresp: s5 \u4E0E\u65E7\u63A5\u53E3\u5747\u65E0\u6709\u6548\u7ED3\u679C");
         return [];
       }
-      if (!resp.data.seriesData || !resp.data.seriesData.seriesList) {
-        log("info", "hanjutvSearchresp: seriesData \u6216 seriesList \u4E0D\u5B58\u5728");
-        return [];
-      }
-      log("info", `hanjutvSearchresp: ${JSON.stringify(resp.data.seriesData.seriesList)}`);
-      let resList = [];
-      for (const anime of resp.data.seriesData.seriesList) {
+      log("info", `[Hanjutv] \u641C\u7D22\u5019\u9009\u7EDF\u8BA1 s5MatchedList=${JSON.stringify(stats.s5MatchedList)}, s5UnmatchedList=${JSON.stringify(stats.s5UnmatchedList)}, webMatchedList=${JSON.stringify(stats.webMatchedList)}, webMatchedList=${JSON.stringify(stats.webUnmatchedList)}`);
+      log("info", `[Hanjutv] \u641C\u7D22\u5019\u9009\u7EDF\u8BA1 s5=${stats.s5Total}(\u547D\u4E2D${stats.s5Matched}), web=${stats.webTotal}(\u547D\u4E2D${stats.webMatched})`);
+      log("info", `[Hanjutv] \u641C\u7D22\u627E\u5230 ${resultList.length} \u4E2A\u6709\u6548\u7ED3\u679C`);
+      return resultList.map((anime) => {
         const animeId = convertToAsciiSum(anime.sid);
-        resList.push({ ...anime, animeId });
-      }
-      return resList;
+        return { ...anime, animeId };
+      });
     } catch (error) {
       log("error", "getHanjutvAnimes error:", {
         message: error.message,
@@ -6511,22 +8029,34 @@ var HanjutvSource = class extends BaseSource {
   }
   async getDetail(id) {
     try {
-      const resp = await Widget.http.get(`https://hxqapi.hiyun.tv/wapi/series/series/detail?sid=${id}`, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-      });
-      if (!resp || !resp.data) {
-        log("info", "getHanjutvDetail: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
-        return [];
+      const sid = String(id || "").trim();
+      if (!sid) return [];
+      let detail = null;
+      try {
+        const appResp = await Widget.http.get(`${this.appHost}/api/series/detail?sid=${sid}`, {
+          headers: this.getAppHeaders(),
+          timeout: 1e4,
+          retries: 1
+        });
+        detail = appResp?.data?.series || null;
+      } catch {
       }
-      if (!resp.data.series) {
+      if (!detail) {
+        try {
+          const webResp = await Widget.http.get(`${this.webHost}/wapi/series/series/detail?sid=${sid}`, {
+            headers: this.getWebHeaders(),
+            timeout: 1e4,
+            retries: 1
+          });
+          detail = webResp?.data?.series || null;
+        } catch {
+        }
+      }
+      if (!detail) {
         log("info", "getHanjutvDetail: series \u4E0D\u5B58\u5728");
         return [];
       }
-      log("info", `getHanjutvDetail: ${JSON.stringify(resp.data.series)}`);
-      return resp.data.series;
+      return detail;
     } catch (error) {
       log("error", "getHanjutvDetail error:", {
         message: error.message,
@@ -6538,23 +8068,64 @@ var HanjutvSource = class extends BaseSource {
   }
   async getEpisodes(id) {
     try {
-      const resp = await Widget.http.get(`https://hxqapi.hiyun.tv/wapi/series/series/detail?sid=${id}`, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-      });
-      if (!resp || !resp.data) {
-        log("info", "getHanjutvEposides: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
-        return [];
+      const sid = String(id || "").trim();
+      if (!sid) return [];
+      let episodes = [];
+      try {
+        const detailResp = await Widget.http.get(`${this.appHost}/api/series/detail?sid=${sid}`, {
+          headers: this.getAppHeaders(),
+          timeout: 1e4,
+          retries: 1
+        });
+        const detailData = detailResp?.data;
+        const playItems = Array.isArray(detailData?.playItems) ? detailData.playItems : [];
+        episodes = this.normalizeEpisodes(playItems);
+      } catch {
       }
-      if (!resp.data.episodes) {
+      if (episodes.length === 0) {
+        try {
+          const epResp = await Widget.http.get(`${this.appHost}/api/series2/episodes?sid=${sid}&refer=${encodeURIComponent(this.defaultRefer)}`, {
+            headers: this.getAppHeaders(),
+            timeout: 1e4,
+            retries: 1
+          });
+          const epData = epResp?.data;
+          episodes = this.normalizeEpisodes(epData?.programs || epData?.episodes || epData?.qxkPrograms || []);
+        } catch {
+        }
+      }
+      if (episodes.length === 0) {
+        try {
+          const pResp = await Widget.http.get(`${this.appHost}/api/series/programs_v2?sid=${sid}`, {
+            headers: this.getAppHeaders(),
+            timeout: 1e4,
+            retries: 1
+          });
+          const pData = pResp?.data;
+          const programs = [
+            ...Array.isArray(pData?.programs) ? pData.programs : [],
+            ...Array.isArray(pData?.qxkPrograms) ? pData.qxkPrograms : []
+          ];
+          episodes = this.normalizeEpisodes(programs);
+        } catch {
+        }
+      }
+      if (episodes.length === 0) {
+        try {
+          const webResp = await Widget.http.get(`${this.webHost}/wapi/series/series/detail?sid=${sid}`, {
+            headers: this.getWebHeaders(),
+            timeout: 1e4,
+            retries: 1
+          });
+          episodes = this.normalizeEpisodes(webResp?.data?.episodes || []);
+        } catch {
+        }
+      }
+      if (episodes.length === 0) {
         log("info", "getHanjutvEposides: episodes \u4E0D\u5B58\u5728");
         return [];
       }
-      const sortedEpisodes = resp.data.episodes.sort((a, b) => a.serialNo - b.serialNo);
-      log("info", `getHanjutvEposides: ${JSON.stringify(sortedEpisodes)}`);
-      return sortedEpisodes;
+      return episodes.sort((a, b) => a.serialNo - b.serialNo);
     } catch (error) {
       log("error", "getHanjutvEposides error:", {
         message: error.message,
@@ -6628,10 +8199,13 @@ var HanjutvSource = class extends BaseSource {
           retries: 1
         });
         if (resp.data && resp.data.danmus) {
-          allDanmus = allDanmus.concat(resp.data.danmus);
+          allDanmus.push(...resp.data.danmus);
         }
         const nextAxis = resp.data.nextAxis || maxAxis;
         if (nextAxis >= maxAxis) {
+          break;
+        }
+        if (nextAxis <= fromAxis) {
           break;
         }
         fromAxis = nextAxis;
@@ -6666,7 +8240,8 @@ var HanjutvSource = class extends BaseSource {
       cid: Number(c.did),
       p: `${(c.t / 1e3).toFixed(2)},${c.tp === 2 ? 5 : c.tp},${Number(c.sc)},[hanjutv]`,
       m: c.con,
-      t: Math.round(c.t / 1e3)
+      t: Math.round(c.t / 1e3),
+      like: c.lc
     }));
   }
 };
@@ -6967,22 +8542,87 @@ var BahamutSource = class extends BaseSource {
 var DandanSource = class extends BaseSource {
   async search(keyword) {
     try {
-      const resp = await Widget.http.get(`https://api.danmaku.weeblify.app/ddp/v1?path=/v2/search/anime?keyword=${keyword}`, {
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": `LogVar Danmu API/${globals.version}`
+      log("info", `[Dandan] \u539F\u59CB\u641C\u7D22\u8BCD: ${keyword}`);
+      const tmdbAbortController = new AbortController();
+      const originalSearchPromise = (async () => {
+        try {
+          const resp = await Widget.http.get(`https://api.danmaku.weeblify.app/ddp/v1?path=/v2/search/anime?keyword=${keyword}`, {
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": `LogVar Danmu API/${globals.version}`
+            }
+          });
+          if (!resp || !resp.data) {
+            log("info", "[Dandan] \u539F\u59CB\u641C\u7D22\u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE (source: original)");
+            return { success: false, source: "original" };
+          }
+          if (!resp.data.animes || resp.data.animes.length === 0) {
+            log("info", "[Dandan] \u539F\u59CB\u641C\u7D22\u6210\u529F\uFF0C\u4F46\u672A\u8FD4\u56DE\u4EFB\u4F55\u7ED3\u679C (source: original)");
+            return { success: false, source: "original" };
+          }
+          tmdbAbortController.abort();
+          const animes = resp.data.animes;
+          log("info", `dandanSearchresp (original): ${JSON.stringify(animes)}`);
+          log("info", `[Dandan] \u8FD4\u56DE ${animes.length} \u6761\u7ED3\u679C (source: original)`);
+          return { success: true, data: animes, source: "original" };
+        } catch (error) {
+          log("error", "getDandanAnimes error:", {
+            message: error.message,
+            name: error.name,
+            stack: error.stack
+          });
+          return { success: false, source: "original" };
         }
-      });
-      if (!resp || !resp.data) {
-        log("info", "dandanSearchresp: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
-        return [];
+      })();
+      const tmdbSearchPromise = (async () => {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          const tmdbResult2 = await getTmdbJaOriginalTitle(keyword, tmdbAbortController.signal, "Dandan");
+          if (!tmdbResult2 || !tmdbResult2.title) {
+            log("info", "[Dandan] TMDB\u8F6C\u6362\u672A\u8FD4\u56DE\u7ED3\u679C\uFF0C\u53D6\u6D88\u65E5\u8BED\u539F\u540D\u641C\u7D22");
+            return { success: false, source: "tmdb" };
+          }
+          const { title: tmdbTitle } = tmdbResult2;
+          log("info", `[Dandan] \u4F7F\u7528\u65E5\u8BED\u539F\u540D\u901A\u8FC7 episodes \u63A5\u53E3\u8FDB\u884C\u641C\u7D22: ${tmdbTitle}`);
+          const resp = await Widget.http.get(`https://api.danmaku.weeblify.app/ddp/v1?path=/v2/search/episodes?anime=${encodeURIComponent(tmdbTitle)}`, {
+            headers: {
+              "Content-Type": "application/json",
+              "User-Agent": `LogVar Danmu API/${globals.version}`
+            },
+            signal: tmdbAbortController.signal
+          });
+          if (!resp || !resp.data) {
+            log("info", "[Dandan] \u65E5\u8BED\u539F\u540D\u641C\u7D22\u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE (source: tmdb)");
+            return { success: false, source: "tmdb" };
+          }
+          if (!resp.data.animes || resp.data.animes.length === 0) {
+            log("info", "[Dandan] \u65E5\u8BED\u539F\u540D\u641C\u7D22\u6210\u529F\uFF0C\u4F46\u672A\u8FD4\u56DE\u4EFB\u4F55\u7ED3\u679C (source: tmdb)");
+            return { success: false, source: "tmdb" };
+          }
+          const animes = resp.data.animes;
+          log("info", `dandanSearchresp (tmdb): ${JSON.stringify(animes)}`);
+          log("info", `[Dandan] \u8FD4\u56DE ${animes.length} \u6761\u7ED3\u679C (source: tmdb)`);
+          return { success: true, data: animes, source: "tmdb" };
+        } catch (error) {
+          if (error.name === "AbortError") {
+            log("info", "[Dandan] \u539F\u59CB\u641C\u7D22\u6210\u529F\uFF0C\u4E2D\u65AD\u65E5\u8BED\u539F\u540D\u641C\u7D22");
+            return { success: false, source: "tmdb", aborted: true };
+          }
+          throw error;
+        }
+      })();
+      const [originalResult, tmdbResult] = await Promise.all([
+        originalSearchPromise,
+        tmdbSearchPromise
+      ]);
+      if (originalResult.success) {
+        return originalResult.data;
       }
-      if (!resp.data.animes) {
-        log("info", "dandanSearchresp: seriesData \u6216 seriesList \u4E0D\u5B58\u5728");
-        return [];
+      if (tmdbResult.success) {
+        return tmdbResult.data;
       }
-      log("info", `dandanSearchresp: ${JSON.stringify(resp.data.animes)}`);
-      return resp.data.animes;
+      log("info", "[Dandan] \u539F\u59CB\u641C\u7D22\u548C\u57FA\u4E8ETMDB\u7684\u641C\u7D22\u5747\u672A\u8FD4\u56DE\u4EFB\u4F55\u7ED3\u679C");
+      return [];
     } catch (error) {
       log("error", "getDandanAnimes error:", {
         message: error.message,
@@ -6992,6 +8632,7 @@ var DandanSource = class extends BaseSource {
       return [];
     }
   }
+  // 获取番剧详情和剧集列表
   async getEpisodes(id) {
     try {
       const resp = await Widget.http.get(`https://api.danmaku.weeblify.app/ddp/v1?path=/v2/bangumi/${id}`, {
@@ -7002,33 +8643,78 @@ var DandanSource = class extends BaseSource {
       });
       if (!resp || !resp.data) {
         log("info", "getDandanEposides: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
-        return [];
+        return { episodes: [], titles: [], relateds: [], type: null, typeDescription: null };
       }
-      if (!resp.data.bangumi && !resp.data.bangumi.episodes) {
-        log("info", "getDandanEposides: episodes \u4E0D\u5B58\u5728");
-        return [];
+      if (!resp.data.bangumi) {
+        log("info", "getDandanEposides: bangumi \u6570\u636E\u4E0D\u5B58\u5728");
+        return { episodes: [], titles: [], relateds: [], type: null, typeDescription: null };
       }
+      const bangumiData = resp.data.bangumi;
+      const episodes = Array.isArray(bangumiData.episodes) ? bangumiData.episodes : [];
+      const titles = Array.isArray(bangumiData.titles) ? bangumiData.titles.map((t) => t.title) : [];
+      const relateds = Array.isArray(bangumiData.relateds) ? bangumiData.relateds : [];
+      const type = bangumiData.type || null;
+      const typeDescription = bangumiData.typeDescription || null;
+      const imageUrl = bangumiData.imageUrl || null;
       log("info", `getDandanEposides: ${JSON.stringify(resp.data.bangumi.episodes)}`);
-      return resp.data.bangumi.episodes;
+      return { episodes, titles, relateds, type, typeDescription, imageUrl };
     } catch (error) {
       log("error", "getDandanEposides error:", {
         message: error.message,
         name: error.name,
         stack: error.stack
       });
-      return [];
+      return { episodes: [], titles: [], relateds: [], type: null, typeDescription: null, imageUrl: null };
     }
   }
+  // 检测标题中是否包含明确的季度或部分特征，用于相关作品开关
+  hasSeasonInfo(title) {
+    return /(?:^|\s)(?:第[0-9一二三四五六七八九十百千万]+季|S(?:eason)?\s*\d+)(?:\s+|_)/gi.test(title) || /^(?:(?:第|S(?:eason)?)\s*\d+(?:季|期|部)?|(?:Part|P|第)\s*\d+(?:部分)?)$/i.test(title) || /(第[0-9一二三四五六七八九十百千万\d]+(?:季|期|部)|S(?:eason)?\s*\d+|Part\s*\d+)/i.test(title);
+  }
+  // 计算两个字符串的文本相似度（字符集交并比算法）
+  calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    const s1 = new Set(str1.toLowerCase());
+    const s2 = new Set(str2.toLowerCase());
+    const intersection = [...s1].filter((char) => s2.has(char)).length;
+    const union = (/* @__PURE__ */ new Set([...s1, ...s2])).size;
+    return intersection / union;
+  }
+  // 处理并转换番剧信息
   async handleAnimes(sourceAnimes, queryTitle, curAnimes) {
     const tmpAnimes = [];
     if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
       log("error", "[Dandan] sourceAnimes is not a valid array");
       return [];
     }
-    const processDandanAnimes = await Promise.all(
-      sourceAnimes.map(async (anime) => {
+    const initialCount = sourceAnimes.length;
+    const existingIds = /* @__PURE__ */ new Set();
+    const queue = [];
+    for (const anime of sourceAnimes) {
+      existingIds.add(anime.animeId);
+      queue.push(anime);
+    }
+    while (queue.length > 0) {
+      const currentBatch = queue.splice(0, queue.length);
+      await Promise.all(currentBatch.map(async (anime) => {
         try {
-          const eps = await this.getEpisodes(anime.animeId);
+          const details = await this.getEpisodes(anime.animeId);
+          const eps = details.episodes;
+          const aliases = details.titles;
+          const similarity = this.calculateSimilarity(queryTitle, anime.animeTitle);
+          if (similarity >= 0.1 && details.relateds && Array.isArray(details.relateds)) {
+            for (const rel of details.relateds) {
+              if (!existingIds.has(rel.animeId) && (this.hasSeasonInfo(rel.animeTitle) || initialCount >= 25)) {
+                existingIds.add(rel.animeId);
+                queue.push({
+                  animeId: rel.animeId,
+                  animeTitle: rel.animeTitle,
+                  imageUrl: rel.imageUrl,
+                  rating: rel.rating || 0
+                });
+              }
+            }
+          }
           let links = [];
           for (const ep of eps) {
             const epTitle = ep.episodeTitle && ep.episodeTitle.trim() !== "" ? `${ep.episodeTitle}` : `\u7B2C${ep.episodeNumber}\u96C6`;
@@ -7039,16 +8725,21 @@ var DandanSource = class extends BaseSource {
             });
           }
           if (links.length > 0) {
+            const resolvedType = details.type || anime.type || "tvseries";
+            const resolvedTypeDescription = details.typeDescription || anime.typeDescription || "TV\u52A8\u753B";
+            const resolvedStartDate = anime.startDate || (eps.length > 0 ? eps[0].airDate : null);
+            const yearStr = resolvedStartDate ? new Date(resolvedStartDate).getFullYear() : "\u672A\u77E5";
             let transformedAnime = {
               animeId: anime.animeId,
               bangumiId: String(anime.animeId),
-              animeTitle: `${anime.animeTitle}(${new Date(anime.startDate).getFullYear()})\u3010${anime.typeDescription}\u3011from dandan`,
-              type: anime.type,
-              typeDescription: anime.typeDescription,
-              imageUrl: anime.imageUrl,
-              startDate: anime.startDate,
+              animeTitle: `${anime.animeTitle}(${yearStr})\u3010${resolvedTypeDescription}\u3011from dandan`,
+              aliases,
+              type: resolvedType,
+              typeDescription: resolvedTypeDescription,
+              imageUrl: details.imageUrl || anime.imageUrl,
+              startDate: resolvedStartDate,
               episodeCount: links.length,
-              rating: anime.rating,
+              rating: anime.rating || 0,
               isFavorited: true,
               source: "dandan"
             };
@@ -7059,10 +8750,10 @@ var DandanSource = class extends BaseSource {
         } catch (error) {
           log("error", `[Dandan] Error processing anime: ${error.message}`);
         }
-      })
-    );
+      }));
+    }
     this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
-    return processDandanAnimes;
+    return tmpAnimes;
   }
   async getEpisodeDanmu(id) {
     let allDanmus = [];
@@ -7136,7 +8827,7 @@ var CustomSource = class extends BaseSource {
         log("info", "customSourceSearchresp: seriesData \u6216 seriesList \u4E0D\u5B58\u5728");
         return [];
       }
-      log("info", `customnSourceSearchresp: ${JSON.stringify(resp.data.animes)}`);
+      log("info", `[Custom] \u641C\u7D22\u627E\u5230 ${resp.data.animes.length} \u4E2A\u6709\u6548\u7ED3\u679C`);
       return resp.data.animes;
     } catch (error) {
       log("error", "getCustomSourceAnimes error:", {
@@ -7753,6 +9444,7 @@ var TencentSource = class extends BaseSource {
         } catch (e) {
         }
       }
+      content.like = parseInt(item.up_count) || 0;
       return content;
     });
   }
@@ -8446,10 +10138,12 @@ var _IqiyiSource = class _IqiyiSource extends BaseSource {
         const danmaku = extract(xml, "content");
         const showTime = extract(xml, "showTime");
         const color = extract(xml, "color");
+        const like = extract(xml, "likeCount");
         contents.push(...danmaku.map((content, i) => ({
           content,
           showTime: showTime[i],
-          color: color[i]
+          color: color[i],
+          like: parseInt(like[i]) || 0
         })));
       }
       return contents;
@@ -8479,6 +10173,7 @@ var _IqiyiSource = class _IqiyiSource extends BaseSource {
       content.color = parseInt(item["color"], 16);
       content.content = decodeHtmlEntities(item["content"]);
       content.size = 25;
+      content.like = item["like"];
       return content;
     });
   }
@@ -9044,6 +10739,7 @@ var MangoSource = class extends BaseSource {
       content.timepoint = item.time / 1e3;
       content.content = item.content;
       content.uid = item.uid;
+      content.like = item.v2_up_count;
       return content;
     });
   }
@@ -9672,13 +11368,13 @@ var _BilibiliSource = class _BilibiliSource extends BaseSource {
     }
   }
   formatComments(comments) {
-    if (globals.danmuSimplifiedTraditional === "simplified") {
-      return comments.map((c) => {
+    return comments.map((c) => {
+      if (globals.danmuSimplifiedTraditional === "simplified") {
         if (c.m) c.m = simplized(c.m);
-        return c;
-      });
-    }
-    return comments;
+      }
+      c.like = c.like_num;
+      return c;
+    });
   }
   // 构建代理URL
   _makeProxyUrl(targetUrl) {
@@ -9696,26 +11392,26 @@ var _BilibiliSource = class _BilibiliSource extends BaseSource {
     return encodeURIComponent(str).replace(/!/g, "%21").replace(/'/g, "%27").replace(/\(/g, "%28").replace(/\)/g, "%29").replace(/\*/g, "%2A").replace(/%20/g, "+");
   }
   // 港澳台代理搜索请求
-  async _searchOverseaRequest(keyword, label = "Original", signal = null) {
+  async _searchOverseaRequest(keyword, appType, webSearchType, label = "Original", signal = null) {
     const rawCookie = globals.bilibliCookie || "";
     const akMatch = rawCookie.match(/([0-9a-fA-F]{32})/);
     const proxy = (globals.proxyUrl || "").includes("bilibili@") || (globals.proxyUrl || "").includes("@");
     if (!proxy) return [];
     if (akMatch) {
-      log("info", `[Bilibili-Proxy][${label}] \u68C0\u6D4B\u5230 Access Key\uFF0C\u542F\u7528 APP \u7AEF\u63A5\u53E3\u6A21\u5F0F...`);
+      log("info", `[Bilibili-Proxy][${label}] \u68C0\u6D4B\u5230 Access Key\uFF0C\u542F\u7528 APP \u7AEF\u63A5\u53E3\u6A21\u5F0F (Type: ${appType})...`);
       try {
-        const params = { keyword, type: 7, area: "tw", mobi_app: "android", platform: "android", build: "8140200", ts: Math.floor(Date.now() / 1e3), appkey: _BilibiliSource.APP_KEY, access_key: akMatch[1], disable_rcmd: 1 };
+        const params = { keyword, type: appType, area: "tw", mobi_app: "android", platform: "android", build: "8140200", ts: Math.floor(Date.now() / 1e3), appkey: _BilibiliSource.APP_KEY, access_key: akMatch[1], disable_rcmd: 1 };
         const qs = Object.keys(params).sort().map((k) => `${k}=${this._javaUrlEncode(String(params[k]))}`).join("&");
         const sign = md5(qs + _BilibiliSource.APP_SEC);
         const target = `https://app.bilibili.com/x/v2/search/type?${qs}&sign=${sign}`;
         const url = globals.makeProxyUrl(target);
         const data = await this._fetchAppSearchWithStream(url, { "User-Agent": "Mozilla/5.0 Android", "X-From-Biliroaming": "1.0.0" }, label, signal);
         if (data && data.code === 0) {
-          return (data.data?.items || data.data || []).filter((i) => i.goto !== "recommend_tips" && i.area !== "\u6F2B\u6E38" && i.badge !== "\u516C\u544A").map((i) => ({
+          return (data.data?.items || data.data?.result || data.data || []).filter((i) => i.goto !== "recommend_tips" && i.area !== "\u6F2B\u6E38" && i.badge !== "\u516C\u544A").map((i) => ({
             provider: "bilibili",
             mediaId: i.season_id ? `ss${i.season_id}` : i.uri.match(/season\/(\d+)/)?.[1] ? `ss${i.uri.match(/season\/(\d+)/)[1]}` : "",
             title: (i.title || "").replace(/<[^>]+>/g, "").trim(),
-            type: "\u52A8\u6F2B",
+            type: this._extractMediaType(i.season_type_name),
             year: i.ptime ? new Date(i.ptime * 1e3).getFullYear() : null,
             imageUrl: i.cover || i.pic || "",
             episodeCount: 0,
@@ -9731,10 +11427,10 @@ var _BilibiliSource = class _BilibiliSource extends BaseSource {
       }
       log("info", `[Bilibili-Proxy] App \u63A5\u53E3\u8BF7\u6C42\u5931\u8D25\uFF0C\u81EA\u52A8\u964D\u7EA7\u81F3 Web \u63A5\u53E3...`);
     } else {
-      log("info", `[Bilibili-Proxy][${label}] \u672A\u68C0\u6D4B\u5230 Access Key\uFF0C\u542F\u7528 Web \u7AEF\u63A5\u53E3\u6A21\u5F0F...`);
+      log("info", `[Bilibili-Proxy][${label}] \u672A\u68C0\u6D4B\u5230 Access Key\uFF0C\u542F\u7528 Web \u7AEF\u63A5\u53E3\u6A21\u5F0F (Type: ${webSearchType})...`);
     }
     try {
-      const params = { keyword, search_type: "media_bangumi", area: "tw", page: 1, order: "totalrank", __refresh__: true, _timestamp: Date.now() };
+      const params = { keyword, search_type: webSearchType, area: "tw", page: 1, order: "totalrank", __refresh__: true, _timestamp: Date.now() };
       const qs = Object.keys(params).map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join("&");
       const target = `https://api.bilibili.com/x/web-interface/search/type?${qs}`;
       const url = globals.makeProxyUrl(target);
@@ -9769,16 +11465,28 @@ var _BilibiliSource = class _BilibiliSource extends BaseSource {
   // 综合港澳台搜索入口
   async _searchOversea(keyword) {
     const tmdbAbortController = new AbortController();
-    const t1 = this._searchOverseaRequest(keyword, "Original").then((r) => {
-      if (r.length) tmdbAbortController.abort();
-      r.forEach((i) => i._originalQuery = keyword);
-      return r;
+    const searchConfigs = [
+      { appType: 7, webType: "media_bangumi" },
+      { appType: 8, webType: "media_ft" }
+    ];
+    const t1 = Promise.all(searchConfigs.map(async (conf, index) => {
+      if (index > 0) await new Promise((r) => setTimeout(r, index * 300));
+      return this._searchOverseaRequest(keyword, conf.appType, conf.webType, "Original");
+    })).then((results) => {
+      const flatResults = results.flat();
+      if (flatResults.length) tmdbAbortController.abort();
+      flatResults.forEach((i) => i._originalQuery = keyword);
+      return flatResults;
     }).catch(() => []);
     const t2 = globals.tmdbApiKey ? new Promise((r) => setTimeout(r, 100)).then(async () => {
       const tmdbResult = await getTmdbJaOriginalTitle(keyword, tmdbAbortController.signal, "Bilibili");
       if (tmdbResult && tmdbResult.title && tmdbResult.title !== keyword) {
         const { title: tmdbTitle, cnAlias } = tmdbResult;
-        const results = await this._searchOverseaRequest(tmdbTitle, "TMDB", tmdbAbortController.signal);
+        const tmdbPromises = searchConfigs.map(async (conf, index) => {
+          if (index > 0) await new Promise((r) => setTimeout(r, index * 300));
+          return this._searchOverseaRequest(tmdbTitle, conf.appType, conf.webType, "TMDB", tmdbAbortController.signal);
+        });
+        const results = (await Promise.all(tmdbPromises)).flat();
         results.forEach((r) => {
           r._originalQuery = keyword;
           r._searchUsedTitle = tmdbTitle;
@@ -9889,6 +11597,1093 @@ __publicField(_BilibiliSource, "WBI_MIXIN_KEY_TABLE", [
 __publicField(_BilibiliSource, "APP_KEY", "1d8b6e7d45233436");
 __publicField(_BilibiliSource, "APP_SEC", "560c52ccd288fed045859ed18bffd973");
 var BilibiliSource = _BilibiliSource;
+
+// danmu_api/utils/migu-util.js
+var WASM_BASE64 = `
+AGFzbQEAAAABWA5gAn9/AX9gA39/fwF/YAJ/fwBgA39/fwBgAX8Bf2ABfwBgBX9/f39/AX9gBX9/f39/AGAAAX9gBH9/f38AYAR/
+f39/AX9gAn5/AX9gBn9/f39/fwBgAAACXAMDd2JnGl9fd2JpbmRnZW5fb2JqZWN0X2Ryb3BfcmVmAAUDd2JnFV9fd2JpbmRnZW5f
+c3RyaW5nX25ldwAAA3diZxdfX3diaW5kZ2VuX2RlYnVnX3N0cmluZwACA4gBhgEEAgUBAAIGBQMFAQMBAgMCAwMCAgAGAAsABQIB
+CAcHAAIHBgMJAwwDAAMDCQAAAAACBwIDAwMDAAIDAwUAAQIBAwAABg0CCgAAAgUFAwIFBAQCAQAFAAoDBAAAAAAAAgICAgQABAQE
+BAIEAAAEBQAAAAQEBAQAAAIAAAECAgABAQgAAAQEBQQFAXABOTkFAwEAEQYJAX8BQYCAwAALB58BCQZtZW1vcnkCAAZlbnNpZ24A
+JA9nYXRld2F5X2VuY3J5cHQAIA9nYXRld2F5X2RlY3J5cHQAIQdnZXRfa2V5AIMBEV9fd2JpbmRnZW5fbWFsbG9jAEUSX193Ymlu
+ZGdlbl9yZWFsbG9jAEkfX193YmluZGdlbl9hZGRfdG9fc3RhY2tfcG9pbnRlcgBvD19fd2JpbmRnZW5fZnJlZQBaCUgBAEEBCzhw
+RF5fL4gBKzJXMYgBcnFfiAFKS247UUAZc2OIAWJBZE4jM4gBYYgBSlFCe3mIAVZ4UTptXWaIAWGIAQ8/fIABGyIKv+YChgG+IQIP
+fwF+IwBBEGsiCyQAAkACQAJ/AkAgAEH1AU8EQEEIQQgQWCEGQRRBCBBYIQVBEEEIEFghAUEAQRBBCBBYQQJ0ayICQYCAfCABIAUg
+Bmpqa0F3cUEDayIBIAEgAksbIABNDQQgAEEEakEIEFghBEG0psAAKAIARQ0DQQAgBGshAwJ/QQAgBEGAAkkNABpBHyAEQf///wdL
+DQAaIARBBiAEQQh2ZyIAa3ZBAXEgAEEBdGtBPmoLIgZBAnRBmKPAAGooAgAiAUUEQEEAIQBBACEFDAILIAQgBhBTdCEHQQAhAEEA
+IQUDQAJAIAEQdCICIARJDQAgAiAEayICIANPDQAgASEFIAIiAw0AQQAhAyABIQBBAAwECyABQRRqKAIAIgIgACACIAEgB0EddkEE
+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
+DAELIAAoAhRB4pzAAEEBIAAoAhgoAgwRAQALIAJBEGokACADQRBqJAALNwACQCABaUEBR0GAgICAeCABayAASXINACAABEBB3aLA
+AC0AABogACABEGAiAUUNAQsgAQ8LAAs5AAJAAn8gAkGAgMQARwRAQQEgACACIAEoAhARAAANARoLIAMNAUEACw8LIAAgAyAEIAEo
+AgwRAQALPwEBfyMAQSBrIgAkACAAQRRqQgA3AgAgAEEBNgIMIABBgJrAADYCCCAAQbiZwAA2AhAgAEEIakGImsAAEEgAC8kCAQJ/
+IwBBIGsiAiQAIAJBATsBHCACIAE2AhggAiAANgIUIAJB1JvAADYCECACQcSbwAA2AgwjAEEQayIBJAACQCACQQxqIgAoAgwiAgRA
+IAAoAggiA0UNASABIAI2AgwgASAANgIIIAEgAzYCBCMAQRBrIgAkACABQQRqIgEoAgAiAkEMaigCACEDAkACfwJAAkAgAigCBA4C
+AAEDCyADDQJBACECQfSWwAAMAQsgAw0BIAIoAgAiAygCBCECIAMoAgALIQMgACACNgIEIAAgAzYCACAAQfCYwAAgASgCBCIAKAII
+IAEoAgggAC0AECAALQARECkACyAAQQA2AgQgACACNgIAIABBhJnAACABKAIEIgAoAgggASgCCCAALQAQIAAtABEQKQALQfSWwABB
+K0GwmMAAEEMAC0H0lsAAQStBwJjAABBDAAstAAJAIANpQQFHQYCAgIB4IANrIAFJckUEQCAAIAEgAyACEFkiAA0BCwALIAALsgEB
+A38gACgCACEAIAEQZ0UEQCABEGhFBEAgADEAACABEBoPCyMAQYABayIDJAAgAC0AACEAA0AgAiADakH/AGpBMEE3IABBD3EiBEEK
+SRsgBGo6AAAgAkEBayECIAAiBEEEdiEAIARBEE8NAAsgAkGAAWoiAEGAAUsEQCAAQYABQZidwAAQNgALIAFBqJ3AAEECIAIgA2pB
+gAFqQQAgAmsQCSADQYABaiQADwsgACABEDALpwIBA38gARBnRQRAIAEQaEUEQCAAIAEQbg8LIwBBgAFrIgMkACAAKAIAIQADQCAC
+IANqQf8AakEwQTcgAEEPcSIEQQpJGyAEajoAACACQQFrIQIgAEEQSSAAQQR2IQBFDQALIAJBgAFqIgBBgAFLBEAgAEGAAUGYncAA
+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
+CQsgBEGAAWokAAwCCyAAQYABQZidwAAQNgALIABBgAFBmJ3AABA2AAsLrwEBA38gASEFAkAgAkEQSQRAIAAhAQwBCyAAQQAgAGtB
+A3EiA2ohBCADBEAgACEBA0AgASAFOgAAIAFBAWoiASAESQ0ACwsgBCACIANrIgJBfHEiA2ohASADQQBKBEAgBUH/AXFBgYKECGwh
+AwNAIAQgAzYCACAEQQRqIgQgAUkNAAsLIAJBA3EhAgsgAgRAIAEgAmohAgNAIAEgBToAACABQQFqIgEgAkkNAAsLIAALuAIBB38C
+QCACIgRBEEkEQCAAIQIMAQsgAEEAIABrQQNxIgNqIQUgAwRAIAAhAiABIQYDQCACIAYtAAA6AAAgBkEBaiEGIAJBAWoiAiAFSQ0A
+CwsgBSAEIANrIghBfHEiB2ohAgJAIAEgA2oiA0EDcQRAIAdBAEwNASADQQN0IgRBGHEhCSADQXxxIgZBBGohAUEAIARrQRhxIQQg
+BigCACEGA0AgBSAGIAl2IAEoAgAiBiAEdHI2AgAgAUEEaiEBIAVBBGoiBSACSQ0ACwwBCyAHQQBMDQAgAyEBA0AgBSABKAIANgIA
+IAFBBGohASAFQQRqIgUgAkkNAAsLIAhBA3EhBCADIAdqIQELIAQEQCACIARqIQMDQCACIAEtAAA6AAAgAUEBaiEBIAJBAWoiAiAD
+SQ0ACwsgAAsLAEGEicAAQSwQAQsHACAAIAFqCwcAIAAgAWsLBwAgAEEIagsHACAAQQhrCwMAAQsL7SEEAEGAgMAAC/MKL1VzZXJz
+L21hZ3Vhbmd6aGkvLmNhcmdvL3JlZ2lzdHJ5L3NyYy9pbmRleC5jcmF0ZXMuaW8tNmYxN2QyMmJiYTE1MDAxZi9ibG9jay1wYWRk
+aW5nLTAuMy4zL3NyYy9saWIucnNhc3NlcnRpb24gZmFpbGVkOiBuIDw9IGJzAAAAABAAZQAAAFEAAAARAAAAAQAAABQAAAAEAAAA
+AgAAAFRyaWVkIHRvIHNocmluayB0byBhIGxhcmdlciBjYXBhY2l0eaAAEAAkAAAAL3J1c3RjLzc5ZTk3MTZjOTgwNTcwYmZkMWY2
+NjZlM2IxNmFjNTgzZjAxNjg5NjIvbGlicmFyeS9hbGxvYy9zcmMvcmF3X3ZlYy5yc8wAEABMAAAArgEAAAkAAAABAAFBQkNERUZH
+SElKS0xNTk9QUVJTVFVWV1hZWmFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6MDEyMzQ1Njc4OSsv////////////////////////
+/////////////////////////////////z7///8/NDU2Nzg5Ojs8Pf////////8AAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGf//
+/////xobHB0eHyAhIiMkJSYnKCkqKywtLi8wMTIz////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////y9Vc2Vycy9tYWd1YW5nemhpLy5jYXJnby9yZWdpc3RyeS9zcmMvaW5kZXguY3JhdGVzLmlvLTZmMTdkMjJi
+YmExNTAwMWYvYmFzZTY0LTAuMjEuMi9zcmMvZW5jb2RlLnJzAAAAawIQAGIAAABQAAAAMwAAAHVzaXplIG92ZXJmbG93IHdoZW4g
+Y2FsY3VsYXRpbmcgYjY0IGxlbmd0aAAAawIQAGIAAABXAAAACgAAAC9Vc2Vycy9tYWd1YW5nemhpLy5jYXJnby9yZWdpc3RyeS9z
+cmMvaW5kZXguY3JhdGVzLmlvLTZmMTdkMjJiYmExNTAwMWYvYmFzZTY0LTAuMjEuMi9zcmMvZW5naW5lL21vZC5yc2ludGVnZXIg
+b3ZlcmZsb3cgd2hlbiBjYWxjdWxhdGluZyBidWZmZXIgc2l6ZQAcAxAAZgAAAHcAAAAOAAAASW52YWxpZCBVVEY4HAMQAGYAAAB8
+AAAAIAAAAGNhbGxlZCBgUmVzdWx0Ojp1bndyYXAoKWAgb24gYW4gYEVycmAgdmFsdWUABgAAAAgAAAAEAAAABwAAAAYAAAAIAAAA
+BAAAAAgAAAAJAAAABAAAAAQAAAAKAAAACwAAAAAAAAABAAAADAAAAHNyYy9saWIucnMAAEgEEAAKAAAAeQAAACUAAAADBQcADwoN
+AQsOBAYJDAgCSAQQAAoAAAB7AAAAJwAAAEFMc1BEcnNPQjdDN0RBZTN1cjhNQ3dzQnNBRUh1Z0M2QXdBQUI3OEtBQTg9SAQQAAoA
+AAAVAAAALwAAANwDEAAAAAAA3AMQAAAAAADcAxAAAAAAANwDEAAAAAAAdnd3THU3ZTZ1ZzRIQVFNQXVnOENzQThIRDdvSER3dXhB
+ZzRIQVFHNkRMQT1IBBAACgAAADcAAAAKAAAARXJyb3IgS2V5AAAASAQQAAoAAABaAAAANgAAAEVycm9yIGRlY29kaW5nIGNpcGhl
+ciB0ZXh0IDFFcnJvciBkZWNyeXB0aW5nIGNpcGhlciB0ZXh0IDKAAEG0i8AAC9gVsgUQAAAAAABKc1ZhbHVlKCkAAAC8BRAACAAA
+AMQFEAABAAAADwAAAAQAAAAEAAAAEAAAAC9Vc2Vycy9tYWd1YW5nemhpLy5jYXJnby9yZWdpc3RyeS9zcmMvaW5kZXguY3JhdGVz
+LmlvLTZmMTdkMjJiYmExNTAwMWYvYmFzZTY0LTAuMjEuMi9zcmMvZW5naW5lL2dlbmVyYWxfcHVycG9zZS9kZWNvZGVfc3VmZml4
+LnJz6AUQAIAAAAAdAAAAGQAAAOgFEACAAAAAmgAAAAkAAABpbnRlcm5hbCBlcnJvcjogZW50ZXJlZCB1bnJlYWNoYWJsZSBjb2Rl
+OiBJbXBvc3NpYmxlOiBtdXN0IG9ubHkgaGF2ZSAwIHRvIDggaW5wdXQgYnl0ZXMgaW4gbGFzdCBjaHVuaywgd2l0aCBubyBpbnZh
+bGlkIGxlbmd0aHMAAIgGEAB+AAAA6AUQAIAAAACFAAAADgAAAGludGVybmFsIGVycm9yOiBlbnRlcmVkIHVucmVhY2hhYmxlIGNv
+ZGU6IEltcG9zc2libGUgcmVtYWluZGVyAAAgBxAAPgAAAC9Vc2Vycy9tYWd1YW5nemhpLy5jYXJnby9yZWdpc3RyeS9zcmMvaW5k
+ZXguY3JhdGVzLmlvLTZmMTdkMjJiYmExNTAwMWYvYmFzZTY0LTAuMjEuMi9zcmMvZW5jb2RlLnJzAABoBxAAYgAAAG4AAAAWAAAA
+aAcQAGIAAACCAAAACQAAAA8AAAAEAAAABAAAABEAAABJbnZhbGlkTGVuZ3RoSW52YWxpZEJ5dGVJbnZhbGlkTGFzdFN5bWJvbElu
+dmFsaWRQYWRkaW5nL1VzZXJzL21hZ3Vhbmd6aGkvLmNhcmdvL3JlZ2lzdHJ5L3NyYy9pbmRleC5jcmF0ZXMuaW8tNmYxN2QyMmJi
+YTE1MDAxZi9iYXNlNjQtMC4yMS4yL3NyYy9lbmdpbmUvZ2VuZXJhbF9wdXJwb3NlL2RlY29kZS5yczMIEAB5AAAAcgAAACkAAAAz
+CBAAeQAAAHMAAAAvAAAAMwgQAHkAAACZAAAAGwAAADMIEAB5AAAAnQAAABkAAAAzCBAAeQAAALAAAAATAAAAMwgQAHkAAACzAAAA
+GAAAADMIEAB5AAAA2gAAAB8AAAAzCBAAeQAAAOAAAAAfAAAAMwgQAHkAAADpAAAAHwAAADMIEAB5AAAA8gAAAB8AAAAzCBAAeQAA
+APsAAAAfAAAAMwgQAHkAAAAEAQAAHwAAADMIEAB5AAAADQEAAB8AAAAzCBAAeQAAABYBAAAfAAAAL1VzZXJzL21hZ3Vhbmd6aGkv
+LmNhcmdvL3JlZ2lzdHJ5L3NyYy9pbmRleC5jcmF0ZXMuaW8tNmYxN2QyMmJiYTE1MDAxZi9iYXNlNjQtMC4yMS4yL3NyYy9lbmdp
+bmUvZ2VuZXJhbF9wdXJwb3NlL21vZC5ycwAAjAkQAHYAAACUAAAADQAAAIwJEAB2AAAAlgAAAEAAAACMCRAAdgAAAJUAAAANAAAA
+jAkQAHYAAACYAAAADQAAAIwJEAB2AAAAnAAAAA0AAACMCRAAdgAAAJ0AAAANAAAAjAkQAHYAAACFAAAAJQAAAIwJEAB2AAAAhgAA
+ACsAAACMCRAAdgAAAD4AAAAbAAAAjAkQAHYAAABAAAAAIAAAAC9Vc2Vycy9tYWd1YW5nemhpLy5jYXJnby9yZWdpc3RyeS9zcmMv
+aW5kZXguY3JhdGVzLmlvLTZmMTdkMjJiYmExNTAwMWYvYWVzLTAuOC4zL3NyYy9zb2Z0L2ZpeHNsaWNlMzIucnMApAoQAGcAAADd
+AQAAKQAAAKQKEABnAAAA8gEAAC0AAACkChAAZwAAAIkEAAASAAAApAoQAGcAAACJBAAAPQAAAKQKEABnAAAAFAUAACIAAACkChAA
+ZwAAABQFAAAJAAAAUGFkRXJyb3JjYWxsZWQgYE9wdGlvbjo6dW53cmFwKClgIG9uIGEgYE5vbmVgIHZhbHVlABQAAAAMAAAABAAA
+ABUAAAAWAAAAFwAAAG1lbW9yeSBhbGxvY2F0aW9uIG9mICBieXRlcyBmYWlsZWQAALgLEAAVAAAAzQsQAA0AAABsaWJyYXJ5L3N0
+ZC9zcmMvYWxsb2MucnPsCxAAGAAAAGIBAAAJAAAAbGlicmFyeS9zdGQvc3JjL3Bhbmlja2luZy5ycxQMEAAcAAAAUwIAAB8AAAAU
+DBAAHAAAAFQCAAAeAAAAFAAAAAwAAAAEAAAAGAAAABkAAAAIAAAABAAAABoAAAAZAAAACAAAAAQAAAAbAAAAHAAAAB0AAAAQAAAA
+BAAAAB4AAAAfAAAAIAAAAAAAAAABAAAAIQAAACIAAAAEAAAABAAAACMAAAAkAAAADAAAAAQAAAAlAAAAJgAAACcAAABsaWJyYXJ5
+L2FsbG9jL3NyYy9yYXdfdmVjLnJzY2FwYWNpdHkgb3ZlcmZsb3cAAADsDBAAEQAAANAMEAAcAAAAFgIAAAUAAABhIGZvcm1hdHRp
+bmcgdHJhaXQgaW1wbGVtZW50YXRpb24gcmV0dXJuZWQgYW4gZXJyb3IAKAAAAAAAAAABAAAAKQAAAGxpYnJhcnkvYWxsb2Mvc3Jj
+L2ZtdC5yc1wNEAAYAAAAYgIAACAAAADvv71ieXRlc2Vycm9yAAAAIgAAAAQAAAAEAAAAKgAAAEZyb21VdGY4RXJyb3IAAAArAAAA
+DAAAAAQAAAAsAAAAKQAAAMQNEAAAAAAAWwAAADAAAAAAAAAAAQAAADEAAABpbmRleCBvdXQgb2YgYm91bmRzOiB0aGUgbGVuIGlz
+ICBidXQgdGhlIGluZGV4IGlzIAAA5A0QACAAAAAEDhAAEgAAADogAADEDRAAAAAAACgOEAACAAAAMgAAAAwAAAAEAAAAMwAAADQA
+AAA1AAAAICAgICB7ICwgIHsKLAp9IH0oKAosCgAAMgAAAAQAAAAEAAAANgAAAF1saWJyYXJ5L2NvcmUvc3JjL2ZtdC9udW0ucnN9
+DhAAGwAAAGkAAAAXAAAAMHgwMDAxMDIwMzA0MDUwNjA3MDgwOTEwMTExMjEzMTQxNTE2MTcxODE5MjAyMTIyMjMyNDI1MjYyNzI4
+MjkzMDMxMzIzMzM0MzUzNjM3MzgzOTQwNDE0MjQzNDQ0NTQ2NDc0ODQ5NTA1MTUyNTM1NDU1NTY1NzU4NTk2MDYxNjI2MzY0NjU2
+NjY3Njg2OTcwNzE3MjczNzQ3NTc2Nzc3ODc5ODA4MTgyODM4NDg1ODY4Nzg4ODk5MDkxOTI5Mzk0OTU5Njk3OTg5OXJhbmdlIHN0
+YXJ0IGluZGV4ICBvdXQgb2YgcmFuZ2UgZm9yIHNsaWNlIG9mIGxlbmd0aCAAAHIPEAASAAAAhA8QACIAAAByYW5nZSBlbmQgaW5k
+ZXgguA8QABAAAACEDxAAIgAAAHNsaWNlIGluZGV4IHN0YXJ0cyBhdCAgYnV0IGVuZHMgYXQgANgPEAAWAAAA7g8QAA0AAAABAQEB
+AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB
+AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQBBzqHAAAszAgICAgICAgICAgICAgICAgIC
+AgICAgICAgICAgICAwMDAwMDAwMDAwMDAwMDAwQEBAQEAEGNosAAC0xOb25lU29tZQAAADIAAAAEAAAABAAAADcAAABFcnJvclV0
+ZjhFcnJvcnZhbGlkX3VwX3RvZXJyb3JfbGVuAAAyAAAABAAAAAQAAAA4AHsJcHJvZHVjZXJzAghsYW5ndWFnZQEEUnVzdAAMcHJv
+Y2Vzc2VkLWJ5AwVydXN0Yx0xLjc0LjAgKDc5ZTk3MTZjOSAyMDIzLTExLTEzKQZ3YWxydXMGMC4xOS4wDHdhc20tYmluZGdlbhIw
+LjIuODcgKGYwYThhZTNiOSkALA90YXJnZXRfZmVhdHVyZXMCKw9tdXRhYmxlLWdsb2JhbHMrCHNpZ24tZXh0
+`;
+var yf = null;
+var Mf = null;
+var jf = null;
+var memoryRef = null;
+var Pf = 0;
+var Ef = new Array(132).fill(void 0);
+Ef.push(void 0, null, true, false);
+var Af = Ef.length;
+function Cf(l) {
+  const n = Ef[l];
+  if (l >= 132) {
+    Ef[l] = Af;
+    Af = l;
+  }
+  return n;
+}
+function If() {
+  if (jf === null || jf.byteLength === 0) {
+    jf = new Uint8Array(memoryRef.buffer);
+  }
+  return jf;
+}
+function Df() {
+  if (Mf === null || Mf.byteLength === 0) {
+    Mf = new Int32Array(memoryRef.buffer);
+  }
+  return Mf;
+}
+function Tf(l, n) {
+  l = l >>> 0;
+  return utf8BytesToString(If().subarray(l, l + n));
+}
+function Nf(l, n, u) {
+  if (u === void 0) {
+    const t2 = stringToUtf8Bytes(l);
+    const e2 = n(t2.length, 1) >>> 0;
+    If().subarray(e2, e2 + t2.length).set(t2);
+    Pf = t2.length;
+    return e2;
+  }
+  const t = stringToUtf8Bytes(l);
+  const e = n(t.length, 1) >>> 0;
+  If().subarray(e, e + t.length).set(t);
+  Pf = t.length;
+  return e;
+}
+function Uf(l) {
+  return l == null;
+}
+function base64ToUint8Array(base64) {
+  const binaryString = atob(base64.replace(/\s+/g, ""));
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+async function initWasm() {
+  if (yf !== null) {
+    return yf;
+  }
+  const wasmBuffer = base64ToUint8Array(WASM_BASE64);
+  const importObject = {
+    wbg: {
+      __wbindgen_object_drop_ref: (l) => Cf(l),
+      __wbindgen_string_new: (ptr, len) => {
+        const str = Tf(ptr, len);
+        if (Af === Ef.length) {
+          Ef.push(Ef.length + 1);
+        }
+        const idx = Af;
+        Af = Ef[idx];
+        Ef[idx] = str;
+        return idx;
+      },
+      __wbindgen_debug_string: () => {
+      }
+    }
+  };
+  const result = await WebAssembly.instantiate(wasmBuffer, importObject);
+  yf = result.instance.exports;
+  memoryRef = yf.memory;
+  Mf = null;
+  jf = null;
+  return yf;
+}
+function Hf(l, n) {
+  let u, t;
+  try {
+    const e = yf.__wbindgen_add_to_stack_pointer(-16);
+    const r = Nf(l, yf.__wbindgen_malloc, yf.__wbindgen_realloc);
+    const o = Pf;
+    const i = Uf(n) ? 0 : Nf(n, yf.__wbindgen_malloc, yf.__wbindgen_realloc);
+    const a = Pf;
+    yf.gateway_decrypt(e, r, o, i, a);
+    const s = Df()[e / 4 + 0];
+    const c = Df()[e / 4 + 1];
+    const f = Df()[e / 4 + 2];
+    const p = Df()[e / 4 + 3];
+    let d = s;
+    let h = c;
+    if (p) {
+      d = 0;
+      h = 0;
+      throw Cf(f);
+    }
+    u = d;
+    t = h;
+    return Tf(d, h);
+  } finally {
+    yf.__wbindgen_add_to_stack_pointer(16);
+    if (u !== void 0 && t !== void 0) {
+      yf.__wbindgen_free(u, t, 1);
+    }
+  }
+}
+async function decrypt(encryptedData, key) {
+  encryptedData = encryptedData.replace(/\s+/g, "");
+  await initWasm();
+  return Hf(encryptedData, key);
+}
+
+// danmu_api/sources/migu.js
+var MiguSource = class extends BaseSource {
+  async search(keyword) {
+    try {
+      const searchUrl = `https://jadeite.migu.cn/search/v3/open-search`;
+      const payload = {
+        appVersion: "6.1.1.00",
+        ct: 101,
+        isCorrectWord: 1,
+        k: keyword,
+        mediaSource: 9e6,
+        packId: "1002581,1002601,1003861,1003862,1003863,1003864,1003865,1003866,1004041,1004121,1004261,1004262,1004281,1004321,1004262,1004281,1004322,1004261,1004421,1004422,1002781,1004301,1004641,1004761,1005061,1005261,1005301,1005321,1005361,1005362,1005341,1005342,1005521,1005722,1005721,1015749,1015761,1015760,1015762,1015763,1015768,1015786,1015790,1015812,1015813,1015814,1015815,1015816,1015817,1015820,1015819,1015821",
+        pageIdx: 1,
+        pageSize: 20,
+        sid: "1X4A395AL3XS3UV5MT8PQ1L5JUYK6KFM8VKDSDD48S5Y7YX5WY1MOUHRT6512988",
+        copyrightTerminal: 3,
+        searchScene: 2,
+        uiVersion: "A3.26.0"
+      };
+      const headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "zh-CN,zh;q=0.9",
+        "Connection": "keep-alive",
+        "Content-Type": "application/json",
+        "Origin": "https://www.miguvideo.com",
+        "Referer": "https://www.miguvideo.com/",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "cross-site",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+        "appId": "miguvideo",
+        "sec-ch-ua": 'Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": "Windows",
+        "terminalId": "www"
+      };
+      const response = await Widget.http.post(searchUrl, JSON.stringify(payload), {
+        headers
+      });
+      if (!response || !response.data) {
+        log("info", "[Migu] \u641C\u7D22\u54CD\u5E94\u4E3A\u7A7A");
+        return [];
+      }
+      const data = typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+      const contentInfoList = data?.body?.contentInfoList;
+      const animes = [];
+      contentInfoList.forEach((contentInfo) => {
+        const shortMediaAsset = contentInfo?.shortMediaAsset;
+        if (shortMediaAsset && shortMediaAsset.isLong) {
+          let epId;
+          if (shortMediaAsset?.extraData) {
+            epId = shortMediaAsset?.extraData?.episodes?.[0];
+          } else {
+            epId = shortMediaAsset?.pID;
+          }
+          animes.push({
+            name: shortMediaAsset.name,
+            type: shortMediaAsset.contDisplayName,
+            year: shortMediaAsset.year.trim(),
+            img: shortMediaAsset.h5pics?.highResolutionV,
+            url: `https://v3-sc.miguvideo.com/program/v4/cont/content-info/${epId}/1`,
+            epsId: epId
+          });
+        }
+      });
+      log("info", `[Migu] \u641C\u7D22\u627E\u5230 ${animes.length} \u4E2A\u6709\u6548\u7ED3\u679C`);
+      return animes;
+    } catch (error) {
+      log("error", "getMiguAnimes error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return [];
+    }
+  }
+  extractEpId(url) {
+    const baseUrl = url.split("?")[0];
+    const segments = baseUrl.split("/").filter((segment) => segment !== "");
+    return segments[segments.length - 1] || "";
+  }
+  async getDetail(id) {
+    try {
+      const resp = await Widget.http.get(`https://v3-sc.miguvideo.com/program/v4/cont/content-info/${id}/1`, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+        }
+      });
+      if (!resp || !resp.data) {
+        log("info", "getMiguDetail: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
+        return { duration: 0, epsID: null };
+      }
+      const duration = resp.data?.body?.data?.playing?.duration || 0;
+      const epsID = resp.data?.body?.data?.epsID || null;
+      return { duration, epsID };
+    } catch (error) {
+      log("error", "getMiguDetail error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return { duration: 0, epsID: null };
+    }
+  }
+  async getEpisodes(id) {
+    try {
+      const detailResp = await Widget.http.get(id, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+        }
+      });
+      if (!detailResp || !detailResp.data) {
+        log("info", "getMiguEposides: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
+        return [];
+      }
+      const eps = detailResp.data?.body?.data?.datas;
+      if (eps) {
+        return eps;
+      } else {
+        const name = detailResp.data?.body?.data?.name;
+        const pID = detailResp.data?.body?.data?.playing?.pID;
+        if (pID) {
+          return [{
+            name,
+            pID
+          }];
+        }
+        log("info", "getMiguEposides: eps \u4E0D\u5B58\u5728");
+        return [];
+      }
+    } catch (error) {
+      log("error", "getMiguEposides error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return [];
+    }
+  }
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes) {
+    const tmpAnimes = [];
+    if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
+      log("error", "[Migu] sourceAnimes is not a valid array");
+      return [];
+    }
+    const processMiguAnimes = await Promise.all(
+      sourceAnimes.filter((s) => titleMatches(s.name || s.title, queryTitle)).map(async (anime) => {
+        try {
+          const eps = await this.getEpisodes(anime.url || anime.mediaId);
+          let links = [];
+          for (const ep of eps) {
+            links.push({
+              "name": ep.name,
+              "url": `https://webapi.miguvideo.com/gateway/live_barrage/videox/barrage/v2/list/${anime.epsId ?? ep.pID}/${ep.pID}`,
+              "title": `\u3010migu\u3011 ${ep.name}`
+            });
+          }
+          if (links.length > 0) {
+            let transformedAnime = {
+              animeId: convertToAsciiSum(anime.epsId ?? eps[0]?.pID),
+              bangumiId: String(anime.epsId ?? eps[0]?.pID),
+              animeTitle: `${anime.name || anime.title}(${anime.year})\u3010${anime.type}\u3011from migu`,
+              type: anime.type,
+              typeDescription: anime.type,
+              imageUrl: anime.img ?? anime.imageUrl,
+              startDate: generateValidStartDate(anime.year),
+              episodeCount: links.length,
+              rating: 0,
+              isFavorited: true,
+              source: "migu"
+            };
+            tmpAnimes.push(transformedAnime);
+            addAnime({ ...transformedAnime, links });
+            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          }
+        } catch (error) {
+          log("error", `[Migu] Error processing anime: ${error.message}`);
+        }
+      })
+    );
+    this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
+    return processMiguAnimes;
+  }
+  async getEpisodeDanmu(id) {
+    log("info", "\u5F00\u59CB\u4ECE\u672C\u5730\u8BF7\u6C42\u54AA\u5495\u89C6\u9891\u5F39\u5E55...", id);
+    const segmentResult = await this.getEpisodeDanmuSegments(id);
+    if (!segmentResult || !segmentResult.segmentList || segmentResult.segmentList.length === 0) {
+      return [];
+    }
+    const segmentList = segmentResult.segmentList;
+    log("info", `\u5F39\u5E55\u5206\u6BB5\u6570\u91CF: ${segmentList.length}`);
+    const MAX_CONCURRENT = 100;
+    const allComments = [];
+    for (let i = 0; i < segmentList.length; i += MAX_CONCURRENT) {
+      const batch = segmentList.slice(i, i + MAX_CONCURRENT);
+      const batchPromises = batch.map((segment) => this.getEpisodeSegmentDanmu(segment));
+      const batchResults = await Promise.allSettled(batchPromises);
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const segment = batch[j];
+        const start2 = segment.segment_start;
+        const end2 = segment.segment_end;
+        if (result.status === "fulfilled") {
+          const comments = result.value;
+          if (comments && comments.length > 0) {
+            allComments.push(...comments);
+          }
+        } else {
+          log("error", `\u83B7\u53D6\u5F39\u5E55\u6BB5\u5931\u8D25 (${start2}-${end2}s):`, result.reason.message);
+        }
+      }
+      if (i + MAX_CONCURRENT < segmentList.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    if (allComments.length === 0) {
+      log("info", `\u54AA\u5495\u89C6\u9891: \u8BE5\u89C6\u9891\u6682\u65E0\u5F39\u5E55\u6570\u636E (vid=${id})`);
+      return [];
+    }
+    printFirst200Chars(allComments);
+    return allComments;
+  }
+  async getEpisodeDanmuSegments(id) {
+    log("info", "\u83B7\u53D6\u54AA\u5495\u89C6\u9891\u5F39\u5E55\u5206\u6BB5\u5217\u8868...", id);
+    const itemId = this.extractEpId(id);
+    const detail = await this.getDetail(itemId);
+    const durationSec = time_to_second(detail.duration);
+    log("info", "itemId:", itemId);
+    log("info", "durationSec:", durationSec);
+    log("info", "epsID:", detail.epsID);
+    const segmentDuration = 30;
+    const segmentList = [];
+    for (let i = 0; i < durationSec; i += segmentDuration) {
+      const segmentStart = i;
+      const segmentEnd = Math.min(i + segmentDuration, durationSec);
+      const danmuUrl = `https://webapi.miguvideo.com/gateway/live_barrage/videox/barrage/v2/list/${detail.epsID ?? itemId}/${itemId}/${segmentStart}/${segmentEnd}/020`;
+      segmentList.push({
+        "type": "migu",
+        "segment_start": segmentStart,
+        "segment_end": segmentEnd,
+        "url": danmuUrl
+      });
+    }
+    return new SegmentListResponse({
+      "type": "migu",
+      "segmentList": segmentList
+    });
+  }
+  async getEpisodeSegmentDanmu(segment) {
+    try {
+      const response = await Widget.http.get(segment.url, {
+        headers: {
+          "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+          "appCode": "miguvideo_default_h5"
+        },
+        retries: 1
+      });
+      let contents = [];
+      if (response && response.data) {
+        const decodeData = await decrypt(response.data);
+        const parsedData = typeof response.data === "string" ? JSON.parse(decodeData) : decodeData;
+        const danmakuList = parsedData?.body?.result ?? [];
+        contents.push(...danmakuList);
+      }
+      return contents;
+    } catch (error) {
+      log("error", "\u8BF7\u6C42\u5206\u7247\u5F39\u5E55\u5931\u8D25:", error);
+      return [];
+    }
+  }
+  formatComments(comments) {
+    return comments.map((c) => ({
+      cid: Number(c.cid),
+      p: `${c.playtime},1,${hexToInt(c.textcolor)},[migu]`,
+      m: c.msg,
+      t: c.playtime,
+      like: c.praiseCount
+    }));
+  }
+};
+var migu_default = MiguSource;
 
 // danmu_api/sources/youku.js
 var YoukuSource = class extends BaseSource {
@@ -10427,6 +13222,7 @@ var YoukuSource = class extends BaseSource {
         else if (pos === 2) content.ct = 4;
       }
       content.content = item.content;
+      content.like = item.extFields.voteUp;
       return content;
     });
   }
@@ -10455,13 +13251,28 @@ var SohuSource = class extends BaseSource {
     if (!item.aid || !item.album_name) {
       return null;
     }
+    if (item.is_trailer === 1) {
+      return null;
+    }
+    if (item.corner_mark && item.corner_mark.text === "\u9884\u544A") {
+      return null;
+    }
     let title = item.album_name.replace("<<<", "").replace(">>>", "");
     let categoryName = null;
-    if (item.meta && item.meta.length >= 2) {
-      const metaText = item.meta[0].txt;
-      const parts = metaText.split("|");
-      if (parts.length > 0) {
-        categoryName = parts[0].trim();
+    if (item.meta && Array.isArray(item.meta)) {
+      for (const metaData of item.meta) {
+        if (metaData.txt && metaData.txt.includes("|")) {
+          const parts = metaData.txt.split("|");
+          if (parts.length > 0) {
+            const firstPart = parts[0].trim();
+            if (firstPart.includes("\u522B\u540D") && parts.length > 1) {
+              categoryName = parts[1].trim();
+            } else {
+              categoryName = firstPart;
+            }
+            break;
+          }
+        }
       }
     }
     return {
@@ -10795,7 +13606,8 @@ var SohuSource = class extends BaseSource {
           cid: String(danmuId),
           p: pString,
           m: comment.c || "",
-          t: parseFloat(vtime)
+          t: parseFloat(vtime),
+          like: comment.fcount
         };
       } catch (error) {
         log("error", `\u683C\u5F0F\u5316\u5F39\u5E55\u5931\u8D25: ${error.message}, \u5F39\u5E55\u6570\u636E:`, comment);
@@ -11404,7 +14216,7 @@ var XiguaSource = class extends BaseSource {
         log("info", "xiguaSearchresp: \u76F8\u5173\u89C6\u9891\u7684section \u4E0D\u5B58\u5728");
         return [];
       }
-      log("info", `xiguaSearchresp: ${JSON.stringify(animes)}`);
+      log("info", `[Xigua] \u641C\u7D22\u627E\u5230 ${animes.length} \u4E2A\u6709\u6548\u7ED3\u679C`);
       return animes;
     } catch (error) {
       log("error", "getXiguaAnimes error:", {
@@ -11426,7 +14238,7 @@ var XiguaSource = class extends BaseSource {
       });
       if (!resp || !resp.data) {
         log("info", "getXiguaDetail: \u8BF7\u6C42\u5931\u8D25\u6216\u65E0\u6570\u636E\u8FD4\u56DE");
-        return [];
+        return 0;
       }
       const match = resp.data.match(/"duration"\s*:\s*([\d.]+)/);
       return match ? parseFloat(match[1]) : 0;
@@ -11436,7 +14248,7 @@ var XiguaSource = class extends BaseSource {
         name: error.name,
         stack: error.stack
       });
-      return [];
+      return 0;
     }
   }
   async getEpisodes(id) {
@@ -11625,6 +14437,304 @@ var XiguaSource = class extends BaseSource {
   }
 };
 var xigua_default = XiguaSource;
+
+// danmu_api/sources/maiduidui.js
+var MaiduiduiSource = class extends BaseSource {
+  constructor() {
+    super();
+    this.domain = "https://mob.mddcloud.com.cn";
+    this.headers = {
+      "user-agent": "Mdd/5.8.00 (Android+32+)",
+      "Content-Type": "application/json",
+      "version": "5.8.00",
+      "Referer": "mdd"
+    };
+  }
+  getPlayload(urlSuffix, dataBody) {
+    const time = Date.now();
+    const queryStr = buildQueryString(dataBody, false);
+    const rawInput = `os:Android|version:5.8.00|action:${urlSuffix}|time:${time}|appToken:|privateKey:e1be6b4cf4021b3d181170d1879a530a9e4130b69032144d5568abfd6cd6c1c2|data:${queryStr}&`;
+    return {
+      "channel": "1000",
+      "data": dataBody,
+      "deviceNum": "853BDD7A1DC011F1C341455071C03AEB",
+      "deviceType": 0,
+      "jsonSign": 0,
+      "os": "Android",
+      "sign": md5(rawInput),
+      "sourceVersion": 0,
+      "terminalType": "APP",
+      "thirdStatus": 0,
+      "time": time,
+      "version": "5.8.00",
+      "visitorStatus": 0
+    };
+  }
+  extractByRegex(url) {
+    const vodUuidMatch = url.match(/\/video\/([a-f0-9]+)\.html/i);
+    const uuidMatch = url.match(/[?&]uuid=([a-f0-9]+)/i);
+    return {
+      vodUuid: vodUuidMatch ? vodUuidMatch[1] : null,
+      uuid: uuidMatch ? uuidMatch[1] : null,
+      success: !!(vodUuidMatch && uuidMatch)
+    };
+  }
+  async search(keyword) {
+    try {
+      const urlSuffix = "/searchApi/search/getAllSearchResult4820.action";
+      const searchUrl = `${this.domain}${urlSuffix}`;
+      const dataBody = {
+        "keyWord": keyword
+      };
+      const response = await Widget.http.post(searchUrl, JSON.stringify(this.getPlayload(urlSuffix, dataBody)), {
+        headers: this.headers
+      });
+      if (!response || !response.data) {
+        log("info", "[Maiduidui] \u641C\u7D22\u54CD\u5E94\u4E3A\u7A7A");
+        return [];
+      }
+      const data = typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+      const animes = [];
+      const typeList = data?.data;
+      for (const typeItem of typeList) {
+        if (typeItem?.typeName === "\u5267\u96C6" || typeItem?.typeName === "\u7535\u5F71" || typeItem?.typeName === "\u7EFC\u827A") {
+          for (const vodItem of typeItem?.vodList) {
+            animes.push({
+              name: vodItem.name,
+              type: typeItem.typeName,
+              year: vodItem.yearName,
+              img: vodItem.downImage,
+              url: vodItem.uuid
+            });
+          }
+        }
+      }
+      log("info", `[Maiduidui] \u641C\u7D22\u627E\u5230 ${animes.length} \u4E2A\u6709\u6548\u7ED3\u679C`);
+      return animes;
+    } catch (error) {
+      log("error", "getMaiduiduiAnimes error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return [];
+    }
+  }
+  async getDetail(id) {
+    try {
+      const idInfo = this.extractByRegex(id);
+      const uuid = idInfo.uuid;
+      const vodUuid = idInfo.vodUuid;
+      const urlSuffix = "/api/vod/listVodSactions.action";
+      const searchUrl = `${this.domain}${urlSuffix}`;
+      const dataBody = {
+        "hasIntroduction": 0,
+        "vodUuid": vodUuid
+      };
+      const response = await Widget.http.post(searchUrl, JSON.stringify(this.getPlayload(urlSuffix, dataBody)), {
+        headers: this.headers
+      });
+      if (!response || !response.data) {
+        log("info", "[Maiduidui] \u83B7\u53D6\u8BE6\u60C5\u4FE1\u606F\u54CD\u5E94\u4E3A\u7A7A");
+        return [];
+      }
+      const data = typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+      for (const epInfo of data?.data) {
+        if (epInfo.uuid === uuid) {
+          return epInfo.duration;
+        }
+      }
+      return 0;
+    } catch (error) {
+      log("error", "getMaiduiduiDetail error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return 0;
+    }
+  }
+  async getEpisodes(id) {
+    try {
+      const urlSuffix = "/api/vod/listVodSactions.action";
+      const searchUrl = `${this.domain}${urlSuffix}`;
+      const dataBody = {
+        "hasIntroduction": 0,
+        "vodUuid": id
+      };
+      const response = await Widget.http.post(searchUrl, JSON.stringify(this.getPlayload(urlSuffix, dataBody)), {
+        headers: this.headers
+      });
+      if (!response || !response.data) {
+        log("info", "[Maiduidui] \u83B7\u53D6\u96C6\u4FE1\u606F\u54CD\u5E94\u4E3A\u7A7A");
+        return [];
+      }
+      const eps = [];
+      const data = typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+      data?.data.forEach((epInfo) => {
+        eps.push({
+          title: epInfo.name,
+          episodeId: epInfo.uuid
+        });
+      });
+      return eps;
+    } catch (error) {
+      log("error", "getMaiduiduiEposides error:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack
+      });
+      return [];
+    }
+  }
+  async handleAnimes(sourceAnimes, queryTitle, curAnimes) {
+    const tmpAnimes = [];
+    if (!sourceAnimes || !Array.isArray(sourceAnimes)) {
+      log("error", "[Maiduidui] sourceAnimes is not a valid array");
+      return [];
+    }
+    const processMaiduiduiAnimes = await Promise.all(
+      sourceAnimes.filter((s) => titleMatches(s.name, queryTitle)).map(async (anime) => {
+        try {
+          const eps = await this.getEpisodes(anime.url);
+          let links = [];
+          for (const ep of eps) {
+            const epTitle = ep.title;
+            links.push({
+              "name": epTitle,
+              "url": `https://www.mddcloud.com.cn/video/${anime.url}.html?uuid=${ep.episodeId}`,
+              "title": `\u3010maiduidui\u3011 ${epTitle}`
+            });
+          }
+          if (links.length > 0) {
+            let transformedAnime = {
+              animeId: convertToAsciiSum(anime.url),
+              bangumiId: anime.url,
+              animeTitle: `${anime.name}(${anime.year})\u3010${anime.type}\u3011from maiduidui`,
+              type: anime.type,
+              typeDescription: anime.type,
+              imageUrl: anime.img,
+              startDate: generateValidStartDate(anime.year),
+              episodeCount: links.length,
+              rating: 0,
+              isFavorited: true,
+              source: "maiduidui"
+            };
+            tmpAnimes.push(transformedAnime);
+            addAnime({ ...transformedAnime, links });
+            if (globals.animes.length > globals.MAX_ANIMES) removeEarliestAnime();
+          }
+        } catch (error) {
+          log("error", `[Maiduidui] Error processing anime: ${error.message}`);
+        }
+      })
+    );
+    this.sortAndPushAnimesByYear(tmpAnimes, curAnimes);
+    return processMaiduiduiAnimes;
+  }
+  async getEpisodeDanmu(id) {
+    log("info", "\u5F00\u59CB\u4ECE\u672C\u5730\u8BF7\u6C42\u57CB\u5806\u5806\u5F39\u5E55...", id);
+    const segmentResult = await this.getEpisodeDanmuSegments(id);
+    if (!segmentResult || !segmentResult.segmentList || segmentResult.segmentList.length === 0) {
+      return [];
+    }
+    const segmentList = segmentResult.segmentList;
+    log("info", `\u5F39\u5E55\u5206\u6BB5\u6570\u91CF: ${segmentList.length}`);
+    const MAX_CONCURRENT = 20;
+    const allComments = [];
+    for (let i = 0; i < segmentList.length; i += MAX_CONCURRENT) {
+      const batch = segmentList.slice(i, i + MAX_CONCURRENT);
+      const batchPromises = batch.map((segment) => this.getEpisodeSegmentDanmu(segment));
+      const batchResults = await Promise.allSettled(batchPromises);
+      for (let j = 0; j < batchResults.length; j++) {
+        const result = batchResults[j];
+        const segment = batch[j];
+        const start2 = segment.segment_start;
+        const end2 = segment.segment_end;
+        if (result.status === "fulfilled") {
+          const comments = result.value;
+          if (comments && comments.length > 0) {
+            allComments.push(...comments);
+          }
+        } else {
+          log("error", `\u83B7\u53D6\u5F39\u5E55\u6BB5\u5931\u8D25 (${start2}-${end2}s):`, result.reason.message);
+        }
+      }
+      if (i + MAX_CONCURRENT < segmentList.length) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    if (allComments.length === 0) {
+      log("info", `\u57CB\u5806\u5806: \u8BE5\u89C6\u9891\u6682\u65E0\u5F39\u5E55\u6570\u636E (vid=${id})`);
+      return [];
+    }
+    printFirst200Chars(allComments);
+    return allComments;
+  }
+  async getEpisodeDanmuSegments(id) {
+    log("info", "\u83B7\u53D6\u57CB\u5806\u5806\u5F39\u5E55\u5206\u6BB5\u5217\u8868...", id);
+    const idInfo = this.extractByRegex(id);
+    const uuid = idInfo.uuid;
+    const duration = await this.getDetail(id);
+    log("info", "uuid:", uuid);
+    log("info", "duration:", duration);
+    const segmentDuration = 60;
+    const segmentList = [];
+    for (let i = 0; i < duration; i += segmentDuration) {
+      const segmentStart = i;
+      const segmentEnd = Math.min(i + segmentDuration, duration);
+      segmentList.push({
+        "type": "maiduidui",
+        "segment_start": segmentStart,
+        "segment_end": segmentEnd,
+        "url": id
+      });
+    }
+    return new SegmentListResponse({
+      "type": "maiduidui",
+      "segmentList": segmentList
+    });
+  }
+  async getEpisodeSegmentDanmu(segment) {
+    try {
+      const idInfo = this.extractByRegex(segment.url);
+      const uuid = idInfo.uuid;
+      const vodUuid = idInfo.vodUuid;
+      const urlSuffix = "/api/barrage/vodBarrage396.action";
+      const searchUrl = `${this.domain}${urlSuffix}`;
+      const dataBody = {
+        "sactionUuid": uuid,
+        "times": segment.segment_start,
+        "vodUuid": vodUuid
+      };
+      const response = await Widget.http.post(searchUrl, JSON.stringify(this.getPlayload(urlSuffix, dataBody)), {
+        headers: this.headers,
+        retries: 1
+      });
+      let contents = [];
+      if (response && response.data) {
+        const parsedData = typeof response.data === "string" ? JSON.parse(response.data) : response.data;
+        const danmakuList = parsedData.data ?? [];
+        danmakuList.forEach((danmakuItem) => {
+          contents.push(...danmakuItem.barrageList);
+        });
+      }
+      return contents;
+    } catch (error) {
+      log("error", "\u8BF7\u6C42\u5206\u7247\u5F39\u5E55\u5931\u8D25:", error);
+      return [];
+    }
+  }
+  formatComments(comments) {
+    return comments.map((c) => ({
+      cid: Number(c.uuid),
+      p: `${c.times.toFixed(2)},1,${hexToInt(c.color.replace("#", ""))},[maiduidui]`,
+      m: c.content,
+      t: c.times
+    }));
+  }
+};
+var maiduidui_default = MaiduiduiSource;
 
 // danmu_api/sources/animeko.js
 var AnimekoSource = class extends BaseSource {
@@ -11914,10 +15024,24 @@ var AnimekoSource = class extends BaseSource {
         }
       }
       const titleSuffix = item._relation_mark ? ` ${item._relation_mark}` : "";
+      const aliases = [];
+      if (item.infobox && Array.isArray(item.infobox)) {
+        item.infobox.forEach((info) => {
+          if (info.key === "\u522B\u540D" && Array.isArray(info.value)) {
+            info.value.forEach((v) => {
+              if (v && v.v) aliases.push(v.v);
+            });
+          }
+        });
+      }
+      if (item.name_cn && item.name_cn !== item.name) {
+        aliases.push(item.name_cn);
+      }
       return {
         id: item.id,
         name: item.name,
         name_cn: (item.name_cn || item.name) + titleSuffix,
+        aliases,
         images: item.images,
         air_date: item.date,
         score: item.score,
@@ -12001,7 +15125,7 @@ var AnimekoSource = class extends BaseSource {
               }
               const epNum = ep.sort || ep.ep;
               const epName = ep.name_cn || ep.name || "";
-              const fullTitle = `EP${epNum} ${epName}`.trim();
+              const fullTitle = `\u7B2C${epNum}\u8BDD ${epName}`.trim();
               links.push({
                 "name": `${epNum}`,
                 "url": ep.id.toString(),
@@ -12015,6 +15139,7 @@ var AnimekoSource = class extends BaseSource {
               animeId: anime.id,
               bangumiId: String(anime.id),
               animeTitle: `${anime.name_cn || anime.name}(${yearStr})\u3010${anime.typeDescription || "\u52A8\u6F2B"}\u3011from animeko`,
+              aliases: anime.aliases || [],
               type: "\u52A8\u6F2B",
               typeDescription: anime.typeDescription || "\u52A8\u6F2B",
               imageUrl: anime.images ? anime.images.common || anime.images.large : "",
@@ -12189,19 +15314,22 @@ var youkuSource = new YoukuSource();
 var iqiyiSource = new IqiyiSource();
 var mangoSource = new MangoSource();
 var bilibiliSource = new BilibiliSource();
+var miguSource = new migu_default();
 var sohuSource = new SohuSource();
 var leshiSource = new LeshiSource();
 var xiguaSource = new xigua_default();
+var maiduiduiSource = new maiduidui_default();
 var animekoSource = new AnimekoSource();
 var otherSource = new OtherSource();
-var doubanSource = new DoubanSource(tencentSource, iqiyiSource, youkuSource, bilibiliSource);
+var doubanSource = new DoubanSource(tencentSource, iqiyiSource, youkuSource, bilibiliSource, miguSource);
 var tmdbSource = new TmdbSource(doubanSource);
 var PENDING_DANMAKU_REQUESTS = /* @__PURE__ */ new Map();
 function matchSeason(anime, queryTitle, season) {
   const normalizedAnimeTitle = normalizeSpaces(anime.animeTitle);
   const normalizedQueryTitle = normalizeSpaces(queryTitle);
   if (normalizedAnimeTitle.includes(normalizedQueryTitle)) {
-    const title = normalizedAnimeTitle.split("(")[0].trim();
+    const match = normalizedAnimeTitle.match(/^(.*?)\(\d{4}\)/);
+    const title = match ? match[1].trim() : normalizedAnimeTitle.split("(")[0].trim();
     if (title.startsWith(normalizedQueryTitle)) {
       const afterTitle = title.substring(normalizedQueryTitle.length).trim();
       if (afterTitle === "" && season === 1) {
@@ -12222,7 +15350,7 @@ function matchSeason(anime, queryTitle, season) {
   }
 }
 async function searchAnime(url, preferAnimeId = null, preferSource = null) {
-  const queryTitle = url.searchParams.get("keyword");
+  let queryTitle = url.searchParams.get("keyword");
   log("info", `Search anime with keyword: ${queryTitle}`);
   if (queryTitle === "") {
     return jsonResponse({
@@ -12231,6 +15359,11 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
       errorMessage: "",
       animes: []
     });
+  }
+  if (globals.animeTitleSimplified) {
+    const simplifiedTitle = simplized(queryTitle);
+    log("info", `searchAnime converted traditional to simplified: ${queryTitle} -> ${simplifiedTitle}`);
+    queryTitle = simplifiedTitle;
   }
   const cachedResults = getSearchCache(queryTitle);
   if (cachedResults !== null) {
@@ -12267,6 +15400,16 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
       platform = "youku";
     } else if (queryTitle.includes(".bilibili.com")) {
       platform = "bilibili1";
+    } else if (queryTitle.includes(".miguvideo.com")) {
+      platform = "migu";
+    } else if (queryTitle.includes(".sohu.com")) {
+      platform = "sohu";
+    } else if (queryTitle.includes(".le.com")) {
+      platform = "leshi";
+    } else if (queryTitle.includes(".douyin.com") || queryTitle.includes(".ixigua.com")) {
+      platform = "xigua";
+    } else if (queryTitle.includes(".mddcloud.com.cn")) {
+      platform = "maiduidui";
     }
     const pageTitle = await getPageTitle(queryTitle);
     const links = [{
@@ -12282,6 +15425,9 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
     }
     if (globals.redisValid && curAnimes.length !== 0) {
       await updateRedisCaches();
+    }
+    if (globals.localRedisValid && curAnimes.length !== 0) {
+
     }
     return jsonResponse({
       errorCode: 0,
@@ -12307,9 +15453,11 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
       if (source === "iqiyi") return iqiyiSource.search(queryTitle);
       if (source === "imgo") return mangoSource.search(queryTitle);
       if (source === "bilibili") return bilibiliSource.search(queryTitle);
+      if (source === "migu") return miguSource.search(queryTitle);
       if (source === "sohu") return sohuSource.search(queryTitle);
       if (source === "leshi") return leshiSource.search(queryTitle);
       if (source === "xigua") return xiguaSource.search(queryTitle);
+      if (source === "maiduidui") return maiduiduiSource.search(queryTitle);
       if (source === "animeko") return animekoSource.search(queryTitle);
     });
     const results = await Promise.all(requestPromises);
@@ -12332,9 +15480,11 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
       iqiyi: animesIqiyi,
       imgo: animesImgo,
       bilibili: animesBilibili,
+      migu: animesMigu,
       sohu: animesSohu,
       leshi: animesLeshi,
       xigua: animesXigua,
+      maiduidui: animesMaiduidui,
       animeko: animesAnimeko
     } = resultData;
     for (const key of globals.sourceOrderArr) {
@@ -12372,12 +15522,16 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
         await mangoSource.handleAnimes(animesImgo, queryTitle, curAnimes);
       } else if (key === "bilibili") {
         await bilibiliSource.handleAnimes(animesBilibili, queryTitle, curAnimes);
+      } else if (key === "migu") {
+        await miguSource.handleAnimes(animesMigu, queryTitle, curAnimes);
       } else if (key === "sohu") {
         await sohuSource.handleAnimes(animesSohu, queryTitle, curAnimes);
       } else if (key === "leshi") {
         await leshiSource.handleAnimes(animesLeshi, queryTitle, curAnimes);
       } else if (key === "xigua") {
         await xiguaSource.handleAnimes(animesXigua, queryTitle, curAnimes);
+      } else if (key === "maiduidui") {
+        await maiduiduiSource.handleAnimes(animesMaiduidui, queryTitle, curAnimes);
       } else if (key === "animeko") {
         await animekoSource.handleAnimes(animesAnimeko, queryTitle, curAnimes);
       }
@@ -12389,11 +15543,11 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
     await applyMergeLogic(curAnimes);
   }
   storeAnimeIdsToMap(curAnimes, queryTitle);
-  if (globals.enableEpisodeFilter) {
+  if (globals.enableAnimeEpisodeFilter) {
     const validAnimes = [];
     for (const anime of curAnimes) {
       const animeTitle = anime.animeTitle || "";
-      if (globals.episodeTitleFilter.test(animeTitle)) {
+      if (globals.animeTitleFilter && globals.animeTitleFilter.test(animeTitle)) {
         log("info", `[searchAnime] Anime ${anime.animeId} filtered by name: ${animeTitle}`);
         continue;
       }
@@ -12421,6 +15575,9 @@ async function searchAnime(url, preferAnimeId = null, preferSource = null) {
   }
   if (globals.redisValid && curAnimes.length !== 0) {
     await updateRedisCaches();
+  }
+  if (globals.localRedisValid && curAnimes.length !== 0) {
+
   }
   if (curAnimes.length > 0) {
     setSearchCache(queryTitle, curAnimes);
@@ -12461,7 +15618,7 @@ async function getBangumi(path2) {
       airDate: anime.startDate
     });
   }
-  if (globals.enableEpisodeFilter) {
+  if (globals.enableAnimeEpisodeFilter) {
     episodesList = episodesList.filter((episode) => {
       return !globals.episodeTitleFilter.test(episode.episodeTitle);
     });
@@ -12544,9 +15701,11 @@ async function fetchMergedComments(url) {
       else if (sourceName === "iqiyi") sourceInstance = iqiyiSource;
       else if (sourceName === "imgo") sourceInstance = mangoSource;
       else if (sourceName === "bilibili") sourceInstance = bilibiliSource;
+      else if (sourceName === "migu") sourceInstance = miguSource;
       else if (sourceName === "sohu") sourceInstance = sohuSource;
       else if (sourceName === "leshi") sourceInstance = leshiSource;
       else if (sourceName === "xigua") sourceInstance = xiguaSource;
+      else if (sourceName === "maiduidui") sourceInstance = maiduiduiSource;
       else if (sourceName === "animeko") sourceInstance = animekoSource;
       if (sourceInstance) {
         try {
@@ -12570,6 +15729,13 @@ async function fetchMergedComments(url) {
     }
   });
   const results = await Promise.all(tasks);
+  if (sourceNames.includes("dandan")) {
+    const realIds = parts.map((part) => {
+      const firstColonIndex = part.indexOf(":");
+      return firstColonIndex === -1 ? "" : part.substring(firstColonIndex + 1);
+    });
+    alignSourceTimelines(results, sourceNames, realIds);
+  }
   let mergedList = [];
   results.forEach((list) => {
     mergedList = mergeDanmakuList(mergedList, list);
@@ -12614,12 +15780,16 @@ async function getComment(path2, queryFormat, segmentFlag) {
       danmus = await bilibiliSource.getComments(url, plat, segmentFlag);
     } else if (url.includes(".youku.com")) {
       danmus = await youkuSource.getComments(url, plat, segmentFlag);
+    } else if (url.includes(".miguvideo.com")) {
+      danmus = await miguSource.getComments(url, plat, segmentFlag);
     } else if (url.includes(".sohu.com")) {
       danmus = await sohuSource.getComments(url, plat, segmentFlag);
     } else if (url.includes(".le.com")) {
       danmus = await leshiSource.getComments(url, plat, segmentFlag);
     } else if (url.includes(".douyin.com") || url.includes(".ixigua.com")) {
       danmus = await xiguaSource.getComments(url, plat, segmentFlag);
+    } else if (url.includes(".mddcloud.com.cn")) {
+      danmus = await maiduiduiSource.getComments(url, plat, segmentFlag);
     }
     const urlPattern = /^(https?:\/\/)?([\w.-]+)\.([a-z]{2,})(\/.*)?$/i;
     if (!urlPattern.test(url)) {
@@ -12649,6 +15819,9 @@ async function getComment(path2, queryFormat, segmentFlag) {
     }
     if (globals.redisValid && animeId) {
       setRedisKey("lastSelectMap", globals.lastSelectMap).catch((e) => log("error", "Redis set error", e));
+    }
+    if (globals.localRedisValid && animeId) {
+
     }
   }
   if (!segmentFlag) {
@@ -12697,12 +15870,16 @@ async function getSegmentComment(segment, queryFormat) {
       danmus = await bilibiliSource.getSegmentComments(segment);
     } else if (platform === "youku") {
       danmus = await youkuSource.getSegmentComments(segment);
+    } else if (platform === "migu") {
+      danmus = await miguSource.getSegmentComments(segment);
     } else if (platform === "sohu") {
       danmus = await sohuSource.getSegmentComments(segment);
     } else if (platform === "leshi") {
       danmus = await leshiSource.getSegmentComments(segment);
     } else if (platform === "xigua") {
       danmus = await xiguaSource.getSegmentComments(segment);
+    } else if (platform === "maiduidui") {
+      danmus = await maiduiduiSource.getSegmentComments(segment);
     } else if (platform === "hanjutv") {
       danmus = await hanjutvSource.getSegmentComments(segment);
     } else if (platform === "bahamut") {
@@ -12740,7 +15917,7 @@ async function getSegmentComment(segment, queryFormat) {
 }
 
 // forward/forward-widget.js
-var wv = true ? "1.13.6" : Globals.VERSION;
+var wv = true ? "1.15.3" : Globals.VERSION;
 WidgetMetadata = {
   id: "forward.auto.danmu2",
   title: "自动弹幕",
@@ -12753,7 +15930,7 @@ WidgetMetadata = {
     // 源配置
     {
       name: "sourceOrder",
-      title: "\u6E90\u6392\u5E8F\u914D\u7F6E\uFF0C\u9ED8\u8BA4'360,vod,renren,hanjutv'\uFF0C\u53EF\u9009['360', 'vod', 'tmdb', 'douban', 'tencent', 'youku', 'iqiyi', 'imgo', 'bilibili', 'sohu', 'leshi', 'xigua', 'renren', 'hanjutv', 'bahamut', 'dandan', 'custom']",
+      title: "\u6E90\u6392\u5E8F\u914D\u7F6E\uFF0C\u9ED8\u8BA4'360,vod,renren,hanjutv'\uFF0C\u53EF\u9009['360', 'vod', 'tmdb', 'douban', 'tencent', 'youku', 'iqiyi', 'imgo', 'bilibili', 'migu', 'sohu', 'leshi', 'xigua', 'maiduidui', 'renren', 'hanjutv', 'bahamut', 'dandan', 'custom']",
       type: "input",
       placeholders: [
         {
@@ -12887,12 +16064,12 @@ WidgetMetadata = {
     // 匹配配置
     {
       name: "platformOrder",
-      title: "\u5E73\u53F0\u4F18\u9009\u914D\u7F6E\uFF0C\u53EF\u9009['qiyi', 'bilibili1', 'imgo', 'youku', 'qq', 'sohu', 'leshi, 'xigua', 'renren', 'hanjutv', 'bahamut', 'dandan', 'custom']",
+      title: "\u5E73\u53F0\u4F18\u9009\u914D\u7F6E\uFF0C\u53EF\u9009['qiyi', 'bilibili1', 'imgo', 'youku', 'qq', 'migu', 'sohu', 'leshi, 'xigua', 'maiduidui', 'renren', 'hanjutv', 'bahamut', 'dandan', 'custom']",
       type: "input",
       placeholders: [
         {
           title: "\u914D\u7F6E1",
-          value: "qq,qiyi,imgo,bilibili1,youku,sohu,leshi,xigua,renren,hanjutv,bahamut,dandan,custom"
+          value: "qq,qiyi,imgo,bilibili1,youku,migu,sohu,leshi,xigua,maiduidui,renren,hanjutv,bahamut,dandan,custom"
         },
         {
           title: "\u914D\u7F6E2",
@@ -12909,6 +16086,17 @@ WidgetMetadata = {
       ]
     },
     {
+      name: "animeTitleFilter",
+      title: "\u5267\u540D\u8FC7\u6EE4\u89C4\u5219\uFF0C\u7528\u4E8E\u63A7\u5236\u5267\u540D\u8FC7\u6EE4\u89C4\u5219\uFF0C\u9700\u5F00\u542F\u8FC7\u6EE4\u5F00\u5173ENABLE_ANIME_EPISODE_FILTER",
+      type: "input",
+      placeholders: [
+        {
+          title: "\u793A\u4F8B",
+          value: "\u5E7F\u573A\u821E|\u9884\u544A"
+        }
+      ]
+    },
+    {
       name: "episodeTitleFilter",
       title: "\u5267\u96C6\u6807\u9898\u8FC7\u6EE4\u89C4\u5219",
       type: "input",
@@ -12920,8 +16108,8 @@ WidgetMetadata = {
       ]
     },
     {
-      name: "enableEpisodeFilter",
-      title: "\u96C6\u6807\u9898\u8FC7\u6EE4\u5F00\u5173\uFF0C\u662F\u5426\u5728\u624B\u52A8\u9009\u62E9\u63A5\u53E3\u4E2D\u542F\u7528\u96C6\u6807\u9898\u8FC7\u6EE4\uFF0C\u9ED8\u8BA4false",
+      name: "enableAnimeEpisodeFilter",
+      title: "\u63A7\u5236\u624B\u52A8\u641C\u7D22\u7684\u65F6\u5019\u662F\u5426\u6839\u636EANIME_TITLE_FILTER\u8FDB\u884C\u5267\u540D\u8FC7\u6EE4\u4EE5\u53CA\u6839\u636EEPISODE_TITLE_FILTER\u8FDB\u884C\u96C6\u6807\u9898\u8FC7\u6EE4\uFF0C\u9ED8\u8BA4false",
       type: "input",
       placeholders: [
         {
@@ -12960,6 +16148,21 @@ WidgetMetadata = {
         }
       ]
     },
+    {
+      name: "animeTitleSimplified",
+      title: "\u641C\u7D22\u7684\u5267\u540D\u6807\u9898\u81EA\u52A8\u7E41\u8F6C\u7B80\uFF0C\u9ED8\u8BA4false",
+      type: "input",
+      placeholders: [
+        {
+          title: "false",
+          value: "false"
+        },
+        {
+          title: "true",
+          value: "true"
+        }
+      ]
+    },
     // 弹幕配置
     {
       name: "blockedWords",
@@ -12968,7 +16171,7 @@ WidgetMetadata = {
       placeholders: [
         {
           title: "\u793A\u4F8B",
-          value: "/.{20,}/,/^\\d{2,4}[-/.]\\d{1,2}[-/.]\\d{1,2}([\u65E5\u53F7.]*)?$/,/^(?!\u54C8+$)([a-zA-Z\u4E00-\u9FA5])\\1{2,}/,/[0-9]+\\.*[0-9]*\\s*(w|\u4E07)+\\s*(\\+|\u4E2A|\u4EBA|\u5728\u770B)+/,/^[a-z]{6,}$/,/^(?:qwertyuiop|asdfghjkl|zxcvbnm)$/,/^\\d{5,}$/,/^(\\d)\\1{2,}$/,/\\d{1,4}/,/(20[0-3][0-9])/,/(0?[1-9]|1[0-2])\u6708/,/\\d{1,2}[.-]\\d{1,2}/,/[@#&$%^*+\\|/\\-_=<>\xB0\u25C6\u25C7\u25A0\u25A1\u25CF\u25CB\u2605\u2606\u25BC\u25B2\u2665\u2666\u2660\u2663\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467\u2468\u2469]/,/[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E\\d]+\u5237/,/\u7B2C[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E\\d]+/,/(\u5168\u4F53\u6210\u5458|\u62A5\u5230|\u62A5\u9053|\u6765\u5566|\u7B7E\u5230|\u5237|\u6253\u5361|\u6211\u5728|\u6765\u4E86|\u8003\u53E4|\u7231\u4E86|\u6316\u575F|\u7559\u5FF5|\u4F60\u597D|\u56DE\u6765|\u54E6\u54E6|\u91CD\u6E29|\u590D\u4E60|\u91CD\u5237|\u518D\u770B|\u5728\u770B|\u524D\u6392|\u6C99\u53D1|\u6709\u4EBA\u770B|\u677F\u51F3|\u672B\u6392|\u6211\u8001\u5A46|\u6211\u8001\u516C|\u6485\u4E86|\u540E\u6392|\u5468\u76EE|\u91CD\u770B|\u5305\u517B|DVD|\u540C\u4E0A|\u540C\u6837|\u6211\u4E5F\u662F|\u4FFA\u4E5F|\u7B97\u6211|\u7231\u8C46|\u6211\u5BB6\u7231\u8C46|\u6211\u5BB6\u54E5\u54E5|\u52A0\u6211|\u4E09\u8FDE|\u5E01|\u65B0\u4EBA|\u5165\u5751|\u8865\u5267|\u51B2\u4E86|\u786C\u4E86|\u770B\u5B8C|\u8214\u5C4F|\u4E07\u4EBA|\u725B\u903C|\u715E\u7B14|\u50BB\u903C|\u5367\u69FD|tm|\u554A\u8FD9|\u54C7\u54E6)/"
+          value: "/.{20,}/,/^\\d{2,4}[-/.]\\d{1,2}[-/.]\\d{1,2}([\u65E5\u53F7.]*)?$/,/^(?!\u54C8+$)([a-zA-Z\u4E00-\u9FA5])\\1{2,}/,/[0-9]+\\.*[0-9]*\\s*(w|\u4E07)+\\s*(\\+|\u4E2A|\u4EBA|\u5728\u770B)+/,/^[a-z]{6,}$/,/^(?:qwertyuiop|asdfghjkl|zxcvbnm)$/,/^\\d{5,}$/,/^(\\d)\\1{2,}$/,/^\\d{1,4}$/,/(20[0-3][0-9])/,/(0?[1-9]|1[0-2])\u6708/,/\\d{1,2}[.-]\\d{1,2}/,/[@#&$%^*+\\|/\\-_=<>\xB0\u25C6\u25C7\u25A0\u25A1\u25CF\u25CB\u2605\u2606\u25BC\u25B2\u2665\u2666\u2660\u2663\u2460\u2461\u2462\u2463\u2464\u2465\u2466\u2467\u2468\u2469]/,/[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E\\d]+\u5237/,/\u7B2C[\u4E00\u4E8C\u4E09\u56DB\u4E94\u516D\u4E03\u516B\u4E5D\u5341\u767E\\d]+/,/(\u5168\u4F53\u6210\u5458|\u62A5\u5230|\u62A5\u9053|\u6765\u5566|\u7B7E\u5230|\u5237|\u6253\u5361|\u6211\u5728|\u6765\u4E86|\u8003\u53E4|\u7231\u4E86|\u6316\u575F|\u7559\u5FF5|\u4F60\u597D|\u56DE\u6765|\u54E6\u54E6|\u91CD\u6E29|\u590D\u4E60|\u91CD\u5237|\u518D\u770B|\u5728\u770B|\u524D\u6392|\u6C99\u53D1|\u6709\u4EBA\u770B|\u677F\u51F3|\u672B\u6392|\u6211\u8001\u5A46|\u6211\u8001\u516C|\u6485\u4E86|\u540E\u6392|\u5468\u76EE|\u91CD\u770B|\u5305\u517B|DVD|\u540C\u4E0A|\u540C\u6837|\u6211\u4E5F\u662F|\u4FFA\u4E5F|\u7B97\u6211|\u7231\u8C46|\u6211\u5BB6\u7231\u8C46|\u6211\u5BB6\u54E5\u54E5|\u52A0\u6211|\u4E09\u8FDE|\u5E01|\u65B0\u4EBA|\u5165\u5751|\u8865\u5267|\u51B2\u4E86|\u786C\u4E86|\u770B\u5B8C|\u8214\u5C4F|\u4E07\u4EBA|\u725B\u903C|\u715E\u7B14|\u50BB\u903C|\u5367\u69FD|tm|\u554A\u8FD9|\u54C7\u54E6)/"
         }
       ]
     },
@@ -13087,6 +16290,21 @@ WidgetMetadata = {
         }
       ]
     },
+    {
+      name: "likeSwitch",
+      title: "\u70B9\u8D5E\u529F\u80FD\u5F00\u5173\uFF0C\u9ED8\u8BA4true",
+      type: "input",
+      placeholders: [
+        {
+          title: "\u5F00\u542F",
+          value: "true"
+        },
+        {
+          title: "\u5173\u95ED",
+          value: "false"
+        }
+      ]
+    },
     // 系统配置
     {
       name: "proxyUrl",
@@ -13166,7 +16384,7 @@ if (typeof window !== "undefined") {
   window.WidgetMetadata = WidgetMetadata;
 }
 var globals2;
-async function initGlobals(sourceOrder, otherServer, customSourceApiUrl, vodServers, vodReturnMode, vodRequestTimeout, bilibiliCookie, platformOrder, episodeTitleFilter, enableEpisodeFilter, strictTitleMatch2, titleMappingTable, blockedWords, groupMinute, danmuLimit, danmuSimplifiedTraditional, convertTopBottomToScroll, convertColor, proxyUrl, tmdbApiKey) {
+async function initGlobals(sourceOrder, otherServer, customSourceApiUrl, vodServers, vodReturnMode, vodRequestTimeout, bilibiliCookie, platformOrder, episodeTitleFilter, enableAnimeEpisodeFilter, strictTitleMatch2, titleMappingTable, animeTitleFilter, animeTitleSimplified, blockedWords, groupMinute, danmuLimit, danmuSimplifiedTraditional, convertTopBottomToScroll, convertColor, proxyUrl, tmdbApiKey, likeSwitch) {
   const env = {};
   if (sourceOrder !== void 0) env.SOURCE_ORDER = sourceOrder;
   if (otherServer !== void 0) env.OTHER_SERVER = otherServer;
@@ -13177,15 +16395,18 @@ async function initGlobals(sourceOrder, otherServer, customSourceApiUrl, vodServ
   if (bilibiliCookie !== void 0) env.BILIBILI_COOKIE = bilibiliCookie;
   if (platformOrder !== void 0) env.PLATFORM_ORDER = platformOrder;
   if (episodeTitleFilter !== void 0) env.EPISODE_TITLE_FILTER = episodeTitleFilter;
-  if (enableEpisodeFilter !== void 0) env.ENABLE_EPISODE_FILTER = enableEpisodeFilter;
+  if (enableAnimeEpisodeFilter !== void 0) env.ENABLE_ANIME_EPISODE_FILTER = enableAnimeEpisodeFilter;
   if (strictTitleMatch2 !== void 0) env.STRICT_TITLE_MATCH = strictTitleMatch2;
   if (titleMappingTable !== void 0) env.TITLE_MAPPING_TABLE = titleMappingTable;
+  if (animeTitleFilter !== void 0) env.ANIME_TITLE_FILTER = animeTitleFilter;
+  if (animeTitleSimplified !== void 0) env.ANIME_TITLE_SIMPLIFIED = animeTitleSimplified;
   if (blockedWords !== void 0) env.BLOCKED_WORDS = blockedWords;
   if (groupMinute !== void 0) env.GROUP_MINUTE = groupMinute;
   if (danmuLimit !== void 0) env.DANMU_LIMIT = danmuLimit;
   if (danmuSimplifiedTraditional !== void 0) env.DANMU_SIMPLIFIED_TRADITIONAL = danmuSimplifiedTraditional;
   if (convertTopBottomToScroll !== void 0) env.CONVERT_TOP_BOTTOM_TO_SCROLL = convertTopBottomToScroll;
   if (convertColor !== void 0) env.CONVERT_COLOR = convertColor;
+  if (likeSwitch !== void 0) env.LIKE_SWITCH = likeSwitch;
   if (proxyUrl !== void 0) env.PROXY_URL = proxyUrl;
   if (tmdbApiKey !== void 0) env.TMDB_API_KEY = tmdbApiKey;
   if (!globals2) {
@@ -13244,9 +16465,11 @@ async function searchDanmu(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch: strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13254,7 +16477,8 @@ async function searchDanmu(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   } = params;
   await initGlobals(
     sourceOrder,
@@ -13266,9 +16490,11 @@ async function searchDanmu(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13276,9 +16502,15 @@ async function searchDanmu(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   );
-  const response = await searchAnime(new URL(`${PREFIX_URL}/api/v2/search/anime?keyword=${title}`));
+  let simplifiedTitle = title;
+  if (globals2.animeTitleSimplified) {
+    simplifiedTitle = simplized(title);
+    log("info", `searchAnime converted traditional to simplified: ${title} -> ${simplifiedTitle}`);
+  }
+  const response = await searchAnime(new URL(`${PREFIX_URL}/api/v2/search/anime?keyword=${simplifiedTitle}`));
   const resJson = await response.json();
   const curAnimes = resJson.animes;
   let animes = [];
@@ -13288,7 +16520,7 @@ async function searchDanmu(params) {
       const matchedAnimes = [];
       const nonMatchedAnimes = [];
       animes.forEach((anime) => {
-        if (matchSeason(anime, title, season) && !(anime.animeTitle.includes("\u7535\u5F71") || anime.animeTitle.includes("movie"))) {
+        if (matchSeason(anime, simplifiedTitle, season) && !(anime.animeTitle.includes("\u7535\u5F71") || anime.animeTitle.includes("movie"))) {
           matchedAnimes.push(anime);
         } else {
           nonMatchedAnimes.push(anime);
@@ -13336,9 +16568,11 @@ async function getDetailById(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch: strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13346,7 +16580,8 @@ async function getDetailById(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   } = params;
   await initGlobals(
     sourceOrder,
@@ -13358,9 +16593,11 @@ async function getDetailById(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13368,7 +16605,8 @@ async function getDetailById(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   );
   const response = await getBangumi(`${PREFIX_URL}/api/v2/bangumi/${animeId}`);
   const resJson = await response.json();
@@ -13396,9 +16634,11 @@ async function getCommentsById(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch: strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13406,7 +16646,8 @@ async function getCommentsById(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   } = params;
   await initGlobals(
     sourceOrder,
@@ -13418,9 +16659,11 @@ async function getCommentsById(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13428,7 +16671,8 @@ async function getCommentsById(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   );
   if (commentId) {
     const storeKey = season && episode ? `${tmdbId}.${season}.${episode}` : `${tmdbId}`;
@@ -13446,26 +16690,29 @@ async function getCommentsById(params) {
         tmdbId,
         season,
         episode,
+        sourceOrder,
         otherServer,
         customSourceApiUrl,
         vodServers,
-        bilibiliCookie,
-        sourceOrder,
-        blockedWords,
-        groupMinute,
         vodReturnMode,
         vodRequestTimeout,
+        bilibiliCookie,
         platformOrder,
         episodeTitleFilter,
-        enableEpisodeFilter,
+        enableAnimeEpisodeFilter,
         strictTitleMatch: strictTitleMatch2,
         titleMappingTable,
+        animeTitleFilter,
+        animeTitleSimplified,
+        blockedWords,
+        groupMinute,
         danmuLimit,
         danmuSimplifiedTraditional,
         convertTopBottomToScroll,
         convertColor,
         proxyUrl,
-        tmdbApiKey
+        tmdbApiKey,
+        likeSwitch
       });
     } else {
       Widget.storage.remove(storeKey);
@@ -13497,9 +16744,11 @@ async function getDanmuWithSegmentTime(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch: strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13507,7 +16756,8 @@ async function getDanmuWithSegmentTime(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   } = params;
   await initGlobals(
     sourceOrder,
@@ -13519,9 +16769,11 @@ async function getDanmuWithSegmentTime(params) {
     bilibiliCookie,
     platformOrder,
     episodeTitleFilter,
-    enableEpisodeFilter,
+    enableAnimeEpisodeFilter,
     strictTitleMatch2,
     titleMappingTable,
+    animeTitleFilter,
+    animeTitleSimplified,
     blockedWords,
     groupMinute,
     danmuLimit,
@@ -13529,7 +16781,8 @@ async function getDanmuWithSegmentTime(params) {
     convertTopBottomToScroll,
     convertColor,
     proxyUrl,
-    tmdbApiKey
+    tmdbApiKey,
+    likeSwitch
   );
   const storeKey = season && episode ? `${tmdbId}.${season}.${episode}` : `${tmdbId}`;
   const segmentList = Widget.storage.get(storeKey);

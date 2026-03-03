@@ -8,7 +8,7 @@
       "title": "自动弹幕",
       "description": "自动获取播放链接并从服务器获取弹幕",
       "requiredVersion": "0.0.2",
-      "version": "1.13.6",
+      "version": "1.15.3",
       "author": "huangxd",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
     },
@@ -22,13 +22,13 @@
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
     },
     {
-      "id": "danmu.pro.online",
-      "title": "弹幕多源",
-      "description": "支持添加多条api并自命名&繁简互转",
+      "id": "forward.combined.media.lists",
+      "title": "影视榜单",
+      "description": "影视动画榜单",
       "requiredVersion": "0.0.2",
-      "version": "1.1.3",
-      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmuapi-ProMax.js"
+      "version": "1.5.0",
+      "author": "𝓑𝓾𝓽𝓽𝓮𝓻𝓯𝓵𝔂",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/combined.js"
     },
     {
       "id": "douban",
@@ -89,7 +89,7 @@
       "title": "热门精选",
       "description": "获取最新热门影片推荐",
       "requiredVersion": "0.0.1",
-      "version": "1.5.51",
+      "version": "1.5.7",
       "author": "两块",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/HotPicks.js"
     },
