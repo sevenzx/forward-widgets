@@ -6,7 +6,7 @@
 
 var WidgetMetadata = {
     id: "makka_global_networks",
-    title: "播出平台",
+    title: "全球电视台与流媒体宇宙",
     description: "全网最全的频道聚合：覆盖爱优腾、网飞、HBO、韩国tvN及各大卫视",
     author: "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
     version: "1.2.5", // 🚀 升级：把频道/平台选择移至右上角快捷菜单

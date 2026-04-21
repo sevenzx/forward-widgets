@@ -6,7 +6,7 @@
 
 WidgetMetadata = {
     id: "global_series_makka",
-    title: "全球影视",
+    title: "全球影视专区",
     description: "自由切换全球十几个国家与地区，探索纯正的本土电影与剧集",
     author: "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
     version: "2.1.1", // 🚀 修复：精准绑定 sort_by 触发右上角下拉菜单

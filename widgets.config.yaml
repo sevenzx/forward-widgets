@@ -33,10 +33,6 @@ widgets:
   - url: https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/ALLINONE.js
     override:
-      title: 播出平台
+      title: 全球电视台与流媒体宇宙
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/Globalseries.js
-    override:
-      title: 全球影视
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/zjrl.js
-    override:
-      title: 全球追剧时刻表

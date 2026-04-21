@@ -122,7 +122,7 @@
     },
     {
       "id": "makka_global_networks",
-      "title": "播出平台",
+      "title": "全球电视台与流媒体宇宙",
       "description": "全网最全的频道聚合：覆盖爱优腾、网飞、HBO、韩国tvN及各大卫视",
       "requiredVersion": "0.0.1",
       "version": "1.2.5",
@@ -131,7 +131,7 @@
     },
     {
       "id": "global_series_makka",
-      "title": "全球影视",
+      "title": "全球影视专区",
       "description": "自由切换全球十几个国家与地区，探索纯正的本土电影与剧集",
       "requiredVersion": "0.0.1",
       "version": "2.1.1",
