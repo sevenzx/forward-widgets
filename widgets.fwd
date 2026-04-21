@@ -40,13 +40,13 @@
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu-universe.lite.js"
     },
     {
-      "id": "forward.combined.media.lists",
-      "title": "影视榜单",
-      "description": "影视动画榜单",
-      "requiredVersion": "0.0.2",
-      "version": "1.5.0",
-      "author": "𝓑𝓾𝓽𝓽𝓮𝓻𝓯𝓵𝔂",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/combined.js"
+      "id": "forward.combined.makkapakka",
+      "title": "影视榜单Lite",
+      "description": "豆瓣全能推荐 | TMDB探索 | 猜你想看",
+      "requiredVersion": "0.0.1",
+      "version": "1.3.1",
+      "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/ysbd.js"
     },
     {
       "id": "douban",
@@ -121,31 +121,31 @@
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/Bangumi_v2.0.0.js"
     },
     {
-      "id": "platform.originals.ui.fix",
+      "id": "makka_global_networks",
       "title": "播出平台",
-      "description": "发现Netflix/HBO/腾讯/B站等平台自制内容",
+      "description": "全网最全的频道聚合：覆盖爱优腾、网飞、HBO、韩国tvN及各大卫视",
       "requiredVersion": "0.0.1",
-      "version": "1.0.4",
+      "version": "1.2.5",
       "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/pingtaidujia.js"
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/ALLINONE.js"
     },
     {
-      "id": "ultimate_media_hub_pro_ui",
+      "id": "global_series_makka",
       "title": "全球影视",
-      "description": "集大成之作：Trakt/豆瓣/平台分流，全线支持展示。",
+      "description": "自由切换全球十几个国家与地区，探索纯正的本土电影与剧集",
       "requiredVersion": "0.0.1",
-      "version": "1.2.1",
+      "version": "2.1.1",
       "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/cn-int-bangdan.js"
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/Globalseries.js"
     },
     {
       "id": "global_tv_calendar_ultimate",
       "title": "全球追剧时刻表",
       "description": "聚合全球剧集更新表&综艺排期&bangumi动漫周更表。",
       "requiredVersion": "0.0.1",
-      "version": "2.0.9",
+      "version": "2.1.3",
       "author": "𝙈𝙖𝙠𝙠𝙖𝙋𝙖𝙠𝙠𝙖",
-      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/zhuijurili-one.js"
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/zjrl.js"
     }
   ]
 }
