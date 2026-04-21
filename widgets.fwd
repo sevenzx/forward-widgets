@@ -8,7 +8,7 @@
       "title": "自动弹幕",
       "description": "自动获取播放链接并从服务器获取弹幕",
       "requiredVersion": "0.0.2",
-      "version": "1.15.3",
+      "version": "1.18.8",
       "author": "huangxd",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_auto.js"
     },
@@ -89,7 +89,7 @@
       "title": "热门精选",
       "description": "获取最新热门影片推荐",
       "requiredVersion": "0.0.1",
-      "version": "1.5.7",
+      "version": "1.6.0",
       "author": "两块",
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/HotPicks.js"
     },

@@ -7,55 +7,8 @@ import vm from "vm";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// --- 1. 基础配置 ---
-const CONFIG = {
-  title: "Lucky7 Widgets",
-  description: "Personal Forward Widgets",
-  icon: "https://assets.vvebo.vip/scripts/icon.png",
-  baseUrl:
-    "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/",
-};
-
-// --- 2. 统一的对象数组配置 ---
-const widgetsConfig = [
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_auto.js",
-    override: { title: "自动弹幕" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/danmu_api.js",
-    override: { title: "弹幕API" },
-  },
-  {
-    url: "https://raw.githubusercontent.com/ocd0711/forward_module/master/widgets/combined.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/douban.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/trakt.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/live.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/yatu.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/zhuijurili.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/letterboxd.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/2kuai/ForwardWidgets/refs/heads/main/Widgets/HotPicks.js",
-  },
-  {
-    url: "https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js",
-  }
-];
-
-// --- 3. 路径准备 ---
+// --- 1. 路径准备 ---
+const configFile = path.resolve(__dirname, "widgets.config.json");
 const widgetsDir = path.resolve(__dirname, "widgets");
 const outputFile = path.resolve(__dirname, "widgets.fwd");
 
@@ -63,29 +16,71 @@ if (!fs.existsSync(widgetsDir)) {
   fs.mkdirSync(widgetsDir, { recursive: true });
 }
 
-// --- 4. 工具函数 ---
+// --- 2. 读取配置 ---
 
+// 读取外部 JSON 配置，避免主脚本里堆积 URL 和元数据配置。
+const loadConfig = () => {
+  const content = fs.readFileSync(configFile, "utf8");
+  const config = JSON.parse(content);
+
+  if (!Array.isArray(config.widgets)) {
+    throw new Error("配置文件中的 widgets 必须是数组");
+  }
+
+  return config;
+};
+
+const CONFIG = loadConfig();
+const widgetsConfig = CONFIG.widgets;
+
+// --- 3. 工具函数 ---
+
+// 删除临时文件，避免失败重试时残留旧的下载中间态。
+const removeTempFile = (filePath) => {
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
+};
+
+// 先下载到临时文件，只有远程内容完整拿到后才覆盖本地代码文件。
 const downloadFile = (url, dest) => {
+  const tempPath = `${dest}.tmp`;
+  removeTempFile(tempPath);
+
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
     https
       .get(url, (res) => {
         if (res.statusCode !== 200) {
+          res.resume();
           reject(new Error(`HTTP ${res.statusCode}`));
           return;
         }
-        res.pipe(file);
-        file.on("finish", () => {
-          file.close();
-          resolve();
+
+        const chunks = [];
+        res.on("data", (chunk) => chunks.push(chunk));
+        res.on("end", () => {
+          try {
+            fs.writeFileSync(tempPath, Buffer.concat(chunks));
+            fs.renameSync(tempPath, dest);
+            resolve();
+          } catch (err) {
+            removeTempFile(tempPath);
+            reject(err);
+          }
+        });
+        res.on("error", (err) => {
+          removeTempFile(tempPath);
+          reject(err);
         });
       })
       .on("error", (err) => {
-        fs.unlink(dest, () => reject(err));
+        removeTempFile(tempPath);
+        reject(err);
       });
   });
 };
 
+// 解析并清洗 widget 元数据，同时把覆盖项回写到本地文件中。
 const getCleanMetadata = (filePath, override = {}) => {
   const code = fs.readFileSync(filePath, "utf8");
   const fileName = path.basename(filePath);
@@ -202,7 +197,9 @@ const getCleanMetadata = (filePath, override = {}) => {
   };
 };
 
-// --- 5. 主程序 ---
+// --- 4. 主程序 ---
+
+// 同步远程 widgets，并在远程失效时沿用本地旧文件继续生成产物。
 async function main() {
   console.log("🚀 开始同步 Widgets");
   const widgetList = [];
@@ -227,7 +224,19 @@ async function main() {
         console.log("⚠️ 无法解析元数据");
       }
     } catch (err) {
-      console.log(`❌ 失败: ${err.message}`);
+      if (!fs.existsSync(destPath)) {
+        console.log(`❌ 失败: ${err.message}`);
+        continue;
+      }
+
+      // 远程 URL 失效时，继续沿用本地旧文件，避免产物因为单点失败而缺项。
+      const cleanData = getCleanMetadata(destPath, override);
+      if (cleanData) {
+        widgetList.push(cleanData);
+        console.log(`⚠️ 下载失败，已沿用本地旧文件: ${err.message}`);
+      } else {
+        console.log(`❌ 下载失败，且本地旧文件无法解析: ${err.message}`);
+      }
     }
   }
 
