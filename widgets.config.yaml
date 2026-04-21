@@ -30,9 +30,30 @@ widgets:
   - url: https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/zhuijurili.js
   - url: https://raw.githubusercontent.com/huangxd-/ForwardWidgets/refs/heads/main/widgets/letterboxd.js
   - url: https://raw.githubusercontent.com/2kuai/ForwardWidgets/refs/heads/main/Widgets/HotPicks.js
-  - url: https://raw.githubusercontent.com/opix-maker/Forward/refs/heads/main/js/Bangumi_v2.0.0.js
+#    MakkaPakka 的模块
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/ALLINONE.js
     override:
       title: 全球电视台与流媒体宇宙
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/Globalseries.js
   - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/zjrl.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/VODyuan/VODREALMOM.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/mk-2.0/MakkaPakka-ALL.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/dongmanone.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/traktkey.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/movielist.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/trakt.js
+    fileName: trakt_makka.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/redu.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/zongyi.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/west.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/xilie.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/today.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/mediahub.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/mediahubrepair.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/liumeititime.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/liumeiti.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/danmu/Danmubinfa.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/VodMax.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/qt/letterboxd.js
+    fileName: letterboxd_makka.js
+  - url: https://raw.githubusercontent.com/MakkaPakka518/FW/refs/heads/main/widgets/normal/imdb.js
