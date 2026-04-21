@@ -22,6 +22,24 @@
       "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu_api.js"
     },
     {
+      "id": "baranwang.danmu.universe",
+      "title": "通用弹幕",
+      "description": "通用弹幕插件，支持腾讯、优酷、爱奇艺、哔哩哔哩、人人视频等平台",
+      "requiredVersion": "0.0.2",
+      "version": "0.15.1",
+      "author": "Baran",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu-universe.js"
+    },
+    {
+      "id": "baranwang.danmu.universe.lite",
+      "title": "通用弹幕 Lite",
+      "description": "通用弹幕插件，支持腾讯、优酷、爱奇艺、哔哩哔哩、人人视频等平台",
+      "requiredVersion": "0.0.2",
+      "version": "0.15.1",
+      "author": "Baran",
+      "url": "https://raw.githubusercontent.com/sevenzx/forward-widgets/refs/heads/master/widgets/danmu-universe.lite.js"
+    },
+    {
       "id": "forward.combined.media.lists",
       "title": "影视榜单",
       "description": "影视动画榜单",

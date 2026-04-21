@@ -5,6 +5,9 @@
   "description": "",
   "main": "main.js",
   "scripts": {
+    "sync": "node main.js",
+    "check-updates": "node main.js --check-updates",
+    "bump-widgets": "node main.js --bump",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

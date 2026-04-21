@@ -7,6 +7,7 @@ import YAML from "yaml";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const cliArgs = new Set(process.argv.slice(2));
 
 // --- 1. 路径准备 ---
 const configFile = path.resolve(__dirname, "widgets.config.yaml");
@@ -18,6 +19,20 @@ if (!fs.existsSync(widgetsDir)) {
 }
 
 // --- 2. 读取配置 ---
+
+// 解析命令行参数，区分普通同步、检查更新和升级版本三种模式。
+const parseCliOptions = () => {
+  const options = {
+    checkUpdates: cliArgs.has("--check-updates"),
+    bump: cliArgs.has("--bump"),
+  };
+
+  if (options.checkUpdates && options.bump) {
+    throw new Error("--check-updates 与 --bump 不能同时使用");
+  }
+
+  return options;
+};
 
 // 读取外部 YAML 配置，避免主脚本里堆积 URL 和元数据配置。
 const loadConfig = () => {
@@ -31,6 +46,12 @@ const loadConfig = () => {
   return config;
 };
 
+// 将更新后的配置写回 YAML，持久化锁定版本等状态。
+const saveConfig = (config) => {
+  fs.writeFileSync(configFile, YAML.stringify(config), "utf8");
+};
+
+const CLI_OPTIONS = parseCliOptions();
 const CONFIG = loadConfig();
 const widgetsConfig = CONFIG.widgets;
 
@@ -43,11 +64,8 @@ const removeTempFile = (filePath) => {
   }
 };
 
-// 先下载到临时文件，只有远程内容完整拿到后才覆盖本地代码文件。
-const downloadFile = (url, dest) => {
-  const tempPath = `${dest}.tmp`;
-  removeTempFile(tempPath);
-
+// 获取远程内容，统一处理 HTTP 状态码和网络异常。
+const fetchBuffer = (url) => {
   return new Promise((resolve, reject) => {
     https
       .get(url, (res) => {
@@ -59,26 +77,130 @@ const downloadFile = (url, dest) => {
 
         const chunks = [];
         res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          try {
-            fs.writeFileSync(tempPath, Buffer.concat(chunks));
-            fs.renameSync(tempPath, dest);
-            resolve();
-          } catch (err) {
-            removeTempFile(tempPath);
-            reject(err);
-          }
-        });
-        res.on("error", (err) => {
-          removeTempFile(tempPath);
-          reject(err);
-        });
+        res.on("end", () => resolve(Buffer.concat(chunks)));
+        res.on("error", reject);
       })
-      .on("error", (err) => {
-        removeTempFile(tempPath);
-        reject(err);
-      });
+      .on("error", reject);
   });
+};
+
+// 获取远程 JSON，用于检查 npm 包的最新版本。
+const fetchJson = async (url) => {
+  const content = await fetchBuffer(url);
+  return JSON.parse(content.toString("utf8"));
+};
+
+// 先下载到临时文件，只有远程内容完整拿到后才覆盖本地代码文件。
+const downloadFile = async (url, dest) => {
+  const tempPath = `${dest}.${process.pid}.tmp`;
+  removeTempFile(tempPath);
+
+  try {
+    const content = await fetchBuffer(url);
+    fs.writeFileSync(tempPath, content);
+    fs.renameSync(tempPath, dest);
+  } catch (err) {
+    removeTempFile(tempPath);
+    throw err;
+  }
+};
+
+// 获取 npm 包最新版本，用于检查更新或执行主动升级。
+const getLatestPackageVersion = async (packageName) => {
+  const registryUrl = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
+  const pkgInfo = await fetchJson(registryUrl);
+  return pkgInfo.version;
+};
+
+// 根据 npm 包名、锁定版本和入口文件拼出稳定的 unpkg 下载地址。
+const buildUnpkgUrl = (packageName, packageVersion, entry) => {
+  const normalizedEntry = entry.replace(/^\/+/, "");
+  return `https://unpkg.com/${packageName}@${packageVersion}/${normalizedEntry}`;
+};
+
+// 将不同来源的配置项解析成统一的下载描述。
+const resolveWidgetItem = async (item, cliOptions) => {
+  if (item.source === "npm") {
+    if (!item.package || !item.entry || !item.packageVersion) {
+      throw new Error("npm 源必须包含 package、entry 和 packageVersion");
+    }
+
+    let targetVersion = item.packageVersion;
+    let latestVersion = null;
+
+    if (cliOptions.checkUpdates || cliOptions.bump) {
+      latestVersion = await getLatestPackageVersion(item.package);
+    }
+
+    if (cliOptions.bump && latestVersion && latestVersion !== item.packageVersion) {
+      targetVersion = latestVersion;
+    }
+
+    return {
+      item,
+      override: item.override || {},
+      url: buildUnpkgUrl(item.package, targetVersion, item.entry),
+      fileName: path.basename(item.entry),
+      packageName: item.package,
+      packageVersion: item.packageVersion,
+      targetPackageVersion: targetVersion,
+      latestPackageVersion: latestVersion,
+    };
+  }
+
+  if (!item.url) {
+    throw new Error("普通源必须包含 url");
+  }
+
+  return {
+    item,
+    override: item.override || {},
+    url: item.url,
+    fileName: path.basename(item.url),
+    packageName: null,
+    packageVersion: null,
+    targetPackageVersion: null,
+    latestPackageVersion: null,
+  };
+};
+
+// 检查所有 npm 源条目的上游版本，并输出是否有新版本可升级。
+const checkWidgetUpdates = async (items) => {
+  console.log("🔍 开始检查 npm 包更新");
+
+  const npmItems = items.filter((item) => item.packageName);
+  if (npmItems.length === 0) {
+    console.log("ℹ️ 当前没有 npm 源条目");
+    return;
+  }
+
+  let updateCount = 0;
+  for (const item of npmItems) {
+    if (!item.latestPackageVersion || item.latestPackageVersion === item.packageVersion) {
+      console.log(`✅ ${item.packageName} 当前已是最新版本 ${item.packageVersion}`);
+      continue;
+    }
+
+    updateCount += 1;
+    console.log(
+      `🆕 ${item.packageName} 可从 ${item.packageVersion} 升级到 ${item.latestPackageVersion}`,
+    );
+  }
+
+  console.log("\n--- 检查统计 ---");
+  console.log(`📦 检查条目: ${npmItems.length} 个`);
+  console.log(`✨ 可升级项: ${updateCount} 个`);
+};
+
+// 预处理配置项，统一生成后续同步所需的下载信息。
+const prepareWidgetItems = async (items, cliOptions) => {
+  const preparedItems = [];
+
+  for (const item of items) {
+    preparedItems.push(await resolveWidgetItem(item, cliOptions));
+  }
+
+  return preparedItems;
 };
 
 // 解析并清洗 widget 元数据，同时把覆盖项回写到本地文件中。
@@ -201,13 +323,13 @@ const getCleanMetadata = (filePath, override = {}) => {
 // --- 4. 主程序 ---
 
 // 同步远程 widgets，并在远程失效时沿用本地旧文件继续生成产物。
-async function main() {
+const syncWidgets = async (items, cliOptions) => {
   console.log("🚀 开始同步 Widgets");
   const widgetList = [];
+  let hasConfigUpdate = false;
 
-  for (const item of widgetsConfig) {
-    const { url, override = {} } = item;
-    const fileName = path.basename(url);
+  for (const item of items) {
+    const { url, override, fileName, targetPackageVersion, packageVersion } = item;
     const destPath = path.join(widgetsDir, fileName);
 
     try {
@@ -218,6 +340,18 @@ async function main() {
       const cleanData = getCleanMetadata(destPath, override);
       if (cleanData) {
         widgetList.push(cleanData);
+
+        // 只有在新版本下载并解析成功后，才把锁定版本反写回配置文件。
+        if (
+          cliOptions.bump &&
+          item.packageName &&
+          targetPackageVersion &&
+          targetPackageVersion !== packageVersion
+        ) {
+          item.item.packageVersion = targetPackageVersion;
+          hasConfigUpdate = true;
+        }
+
         console.log(
           `✅ ${override.title ? `[自定义标题: ${override.title}]` : ""}`,
         );
@@ -241,6 +375,10 @@ async function main() {
     }
   }
 
+  if (hasConfigUpdate) {
+    saveConfig(CONFIG);
+  }
+
   const finalResult = {
     title: CONFIG.title,
     description: CONFIG.description,
@@ -253,6 +391,21 @@ async function main() {
   console.log("\n--- 同步统计 ---");
   console.log(`✨ 成功生成: ${widgetList.length} 个项目`);
   console.log(`📝 配置文件: ${outputFile}`);
+  if (hasConfigUpdate) {
+    console.log(`🔒 已回写锁定版本: ${configFile}`);
+  }
+};
+
+// 作为脚本入口，按命令行模式选择检查更新或执行同步。
+async function main() {
+  const preparedItems = await prepareWidgetItems(widgetsConfig, CLI_OPTIONS);
+
+  if (CLI_OPTIONS.checkUpdates) {
+    await checkWidgetUpdates(preparedItems);
+    return;
+  }
+
+  await syncWidgets(preparedItems, CLI_OPTIONS);
 }
 
 main();
