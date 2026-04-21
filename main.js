@@ -3,12 +3,13 @@ import https from "https";
 import path from "path";
 import { fileURLToPath } from "url";
 import vm from "vm";
+import YAML from "yaml";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- 1. 路径准备 ---
-const configFile = path.resolve(__dirname, "widgets.config.json");
+const configFile = path.resolve(__dirname, "widgets.config.yaml");
 const widgetsDir = path.resolve(__dirname, "widgets");
 const outputFile = path.resolve(__dirname, "widgets.fwd");
 
@@ -18,10 +19,10 @@ if (!fs.existsSync(widgetsDir)) {
 
 // --- 2. 读取配置 ---
 
-// 读取外部 JSON 配置，避免主脚本里堆积 URL 和元数据配置。
+// 读取外部 YAML 配置，避免主脚本里堆积 URL 和元数据配置。
 const loadConfig = () => {
   const content = fs.readFileSync(configFile, "utf8");
-  const config = JSON.parse(content);
+  const config = YAML.parse(content);
 
   if (!Array.isArray(config.widgets)) {
     throw new Error("配置文件中的 widgets 必须是数组");
